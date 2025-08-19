@@ -4,7 +4,6 @@ import YouTube from "react-youtube";
 import { dictionaries, getInitialLang } from "./i18n.js";
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:4000";
-
 const socket = io(SERVER_URL, { transports: ["websocket"] });
 
 function useSocketEvent(event, handler) {
@@ -14,10 +13,19 @@ function useSocketEvent(event, handler) {
   }, [event, handler]);
 }
 
-function Section({ title, children }) {
+function Section({ title, children, toolbar }) {
   return (
-    <div style={{ padding: 16, marginBottom: 16, border: "1px solid #eee", borderRadius: 12 }}>
-      <h2 style={{ margin: 0, marginBottom: 8 }}>{title}</h2>
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 8,
+        }}>
+        <h2 style={{ margin: 0 }}>{title}</h2>
+        {toolbar}
+      </div>
       {children}
     </div>
   );
@@ -37,11 +45,11 @@ export default function App() {
 
   // Playlist management (host)
   const [playlistUrl, setPlaylistUrl] = useState("");
-  const [parsed, setParsed] = useState(null); // response from /api/parse-playlist
+  const [parsed, setParsed] = useState(null);
   const [loadingPlaylist, setLoadingPlaylist] = useState(false);
 
   // Round state
-  const [round, setRound] = useState(null); // { mode, startedAt, hint, playback }
+  const [round, setRound] = useState(null);
   const [guess, setGuess] = useState("");
   const [lastResult, setLastResult] = useState(null);
   const audioRef = useRef(null);
@@ -53,7 +61,6 @@ export default function App() {
     setLastResult(null);
     setRound(payload);
     setGuess("");
-    // Auto play when data arrives
     setTimeout(() => {
       if (payload.playback?.type === "audio" && audioRef.current) {
         audioRef.current.currentTime = 0;
@@ -63,7 +70,6 @@ export default function App() {
   });
   useSocketEvent("roundEnd", (payload) => {
     setLastResult(payload);
-    // Stop playback
     if (audioRef.current) audioRef.current.pause();
     if (ytRef.current) ytRef.current.internalPlayer?.stopVideo?.();
   });
@@ -81,12 +87,16 @@ export default function App() {
 
   function joinRoom() {
     if (!roomCode) return;
-    socket.emit("joinRoom", { code: roomCode.toUpperCase(), name: name || "Gracz" }, (resp) => {
-      if (resp?.error) return alert(resp.error);
-      setRoomCode(roomCode.toUpperCase());
-      setIsHost(resp.hostId === socket.id);
-      setStage("lobby");
-    });
+    socket.emit(
+      "joinRoom",
+      { code: roomCode.toUpperCase(), name: name || "Gracz" },
+      (resp) => {
+        if (resp?.error) return alert(resp.error);
+        setRoomCode(roomCode.toUpperCase());
+        setIsHost(resp.hostId === socket.id);
+        setStage("lobby");
+      }
+    );
   }
 
   async function parsePlaylist() {
@@ -95,10 +105,10 @@ export default function App() {
       const r = await fetch(`${SERVER_URL}/api/parse-playlist`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: playlistUrl })
+        body: JSON.stringify({ url: playlistUrl }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Błąd pobierania playlisty.");
+      if (!r.ok) throw new Error(data.error || "Error loading playlist.");
       setParsed(data);
     } catch (e) {
       alert(e.message);
@@ -109,9 +119,13 @@ export default function App() {
 
   function startGame() {
     if (!parsed) return;
-    socket.emit("startGame", { code: roomCode, mode: parsed.source, tracks: parsed.tracks }, (resp) => {
-      if (resp?.error) return alert(resp.error);
-    });
+    socket.emit(
+      "startGame",
+      { code: roomCode, mode: parsed.source, tracks: parsed.tracks },
+      (resp) => {
+        if (resp?.error) return alert(resp.error);
+      }
+    );
   }
 
   function nextRound() {
@@ -126,9 +140,6 @@ export default function App() {
     if (!txt) return;
     socket.emit("guess", { code: roomCode, guessText: txt }, (resp) => {
       if (resp?.error) return alert(resp.error);
-      if (!resp.correct) {
-        // optionally show feedback
-      }
     });
     setGuess("");
   }
@@ -142,56 +153,81 @@ export default function App() {
     input.value = "";
   }
 
-  const isSpotify = parsed?.source === "spotify";
-  const isYouTube = parsed?.source === "youtube";
-
   return (
-    <div style={{ maxWidth: 1000, margin: "40px auto", fontFamily: "ui-sans-serif, system-ui, Arial" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <h1 style={{ marginBottom: 4 }}>{dict.title}</h1>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span style={{ color: "#555", fontSize: 14 }}>{dict.language}:</span>
-          <select value={lang} onChange={e=>setLang(e.target.value)}>
+    <div className="container">
+      <div className="header">
+        <h1 className="h1">🎵 {dict.title}</h1>
+        <div className="row">
+          <span className="kbd">{dict.language}:</span>
+          <select value={lang} onChange={(e) => setLang(e.target.value)}>
             <option value="pl">{dict.polish}</option>
             <option value="en">{dict.english}</option>
           </select>
         </div>
       </div>
-      <p style={{ marginTop: 0, color: "#555" }}>${dict.subtitle}</p>
+      <p className="subtitle">{dict.subtitle}</p>
 
       {stage === "welcome" && (
-        <Section title="${dict.enterGame}">
-          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-            <input placeholder="${dict.yourName}" value={name} onChange={e => setName(e.target.value)} />
-            <input placeholder="${dict.roomCodePlaceholder}" value={roomCode} onChange={e => setRoomCode(e.target.value.toUpperCase())} />
-            <button onClick={joinRoom}>${dict.join}</button>
-            <span style={{ color: "#888" }}>${dict.or}</span>
-            <button onClick={createRoom}>${dict.createRoom}</button>
+        <Section title={dict.enterGame}>
+          <div className="row">
+            <input
+              className="input"
+              placeholder={dict.yourName}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <input
+              className="input"
+              placeholder={dict.roomCodePlaceholder}
+              value={roomCode}
+              onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+            />
+            <button className="btn" onClick={joinRoom}>
+              {dict.join}
+            </button>
+            <span className="badge">{dict.or}</span>
+            <button className="btn secondary" onClick={createRoom}>
+              {dict.createRoom}
+            </button>
           </div>
         </Section>
       )}
 
       {stage !== "welcome" && (
         <Section title={`${dict.room}: ${roomCode}`}>
-          <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div className="row" style={{ alignItems: "flex-start" }}>
             <div style={{ flex: 1, minWidth: 260 }}>
-              <h3>${dict.players}</h3>
-              <ul>
-                {roomState?.players?.map(p => (
-                  <li key={p.name}>{p.name} — <b>{p.score}</b> pkt</li>
+              <h3>{dict.players}</h3>
+              <ul className="list">
+                {roomState?.players?.map((p) => (
+                  <li key={p.name}>
+                    {p.name} — <b>{p.score}</b> pkt
+                  </li>
                 ))}
               </ul>
             </div>
             <div style={{ flex: 2, minWidth: 320 }}>
-              <h3>${dict.chat}</h3>
-              <div style={{ border: "1px solid #eee", height: 160, overflow: "auto", borderRadius: 8, padding: 8, background: "#fafafa" }}>
+              <h3>{dict.chat}</h3>
+              <div className="chatbox">
                 {chatLog.map((m, i) => (
-                  <div key={i}><b>{m.name}:</b> {m.text}</div>
+                  <div key={i}>
+                    <b>{m.name}:</b> {m.text}
+                  </div>
                 ))}
               </div>
-              <form onSubmit={sendChat} style={{ marginTop: 8, display: "flex", gap: 8 }}>
-                <input name="msg" placeholder="Napisz wiadomość..." style={{ flex: 1 }}/>
-                <button type="submit">${dict.send}</button>
+              <form
+                onSubmit={sendChat}
+                className="row"
+                style={{ marginTop: 8 }}>
+                <input
+                  className="input"
+                  name="msg"
+                  placeholder="Napisz wiadomość..."
+                  style={{ flex: 1 }}
+                />
+                <button className="btn" type="submit">
+                  {dict.send}
+                </button>
               </form>
             </div>
           </div>
@@ -199,91 +235,136 @@ export default function App() {
       )}
 
       {stage === "lobby" && isHost && (
-        <Section title="${dict.gameSettings}">
-          <div style={{ display: "grid", gap: 8 }}>
+        <Section title={dict.gameSettings}>
+          <div className="grid">
             <input
-              placeholder="Wklej link do playlisty Spotify ${dict.or} YouTube"
+              className="input"
+              placeholder={dict.pastePlaylist}
               value={playlistUrl}
-              onChange={e => setPlaylistUrl(e.target.value)}
+              onChange={(e) => setPlaylistUrl(e.target.value)}
             />
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button onClick={parsePlaylist} disabled={loadingPlaylist || !playlistUrl}>
-                {loadingPlaylist ? "${dict.loading}" : "${dict.loadPlaylist}"}
+            <div className="row">
+              <button
+                className="btn"
+                onClick={parsePlaylist}
+                disabled={loadingPlaylist || !playlistUrl}>
+                {loadingPlaylist ? dict.loading : dict.loadPlaylist}
               </button>
               {parsed && (
-                <span style={{ color: "#333" }}>
-                  ${dict.loaded}: <b>{parsed.total}</b> pozycji {parsed.source === "spotify" ? `(${dict.playable}: ${parsed.playable})` : ""}
+                <span className="badge">
+                  {dict.loaded}: <b>{parsed.total}</b>{" "}
+                  {parsed.source === "spotify"
+                    ? `(${dict.playable}: ${parsed.playable})`
+                    : ""}
                 </span>
               )}
             </div>
-
-            {parsed && (
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <button onClick={startGame}>${dict.startGame}</button>
-                <button onClick={nextRound}>${dict.nextRound}</button>
+            {parsed ? (
+              <div className="row">
+                <button className="btn" onClick={startGame}>
+                  {dict.startGame}
+                </button>
+                <button className="btn ghost" onClick={nextRound}>
+                  {dict.nextRound}
+                </button>
               </div>
-            )}
-            {!parsed && (
-              <p style={{ color: "#666" }}>
-                Uwaga: dla Spotify używamy 30‑sekundowych podglądów (preview). Dla YouTube wymagany jest klucz API po stronie serwera.
-              </p>
+            ) : (
+              <p className="badge">{dict.note}</p>
             )}
           </div>
         </Section>
       )}
 
       {stage === "playing" && (
-        <Section title="${dict.round}">
+        <Section title={dict.round}>
           {!round && isHost && (
-            <button onClick={nextRound}>${dict.startRound}</button>
+            <button className="btn" onClick={nextRound}>
+              {dict.startRound}
+            </button>
           )}
           {round && (
-            <div style={{ display: "grid", gap: 16 }}>
+            <div className="grid">
               <div>
-                <div style={{ fontSize: 14, color: "#666" }}>
+                <div className="badge">
                   {dict.hint(round.hint?.titleLen, round.hint?.artistLen)}
                 </div>
                 {round.playback?.type === "audio" && (
-                  <audio ref={audioRef} controls src={round.playback.previewUrl} style={{ marginTop: 8 }} />
+                  <audio
+                    className="audio"
+                    ref={audioRef}
+                    controls
+                    src={round.playback.previewUrl}
+                  />
                 )}
                 {round.playback?.type === "youtube" && (
-                  <div style={{ marginTop: 8 }}>
+                  <div>
                     <YouTube
                       videoId={round.playback.videoId}
-                      opts={{ width: "0", height: "0", playerVars: { autoplay: 1 } }}
+                      opts={{
+                        width: "0",
+                        height: "0",
+                        playerVars: { autoplay: 1 },
+                      }}
                       onReady={(e) => {
                         ytRef.current = e.target;
                         e.target.playVideo();
                       }}
                     />
-                    <div style={{ fontSize: 12, color: "#888" }}>${dict.hiddenYT}</div>
+                    <div className="badge">{dict.hiddenYT}</div>
                   </div>
                 )}
               </div>
 
-              <form onSubmit={sendGuess} style={{ display: "flex", gap: 8 }}>
-                <input value={guess} onChange={e => setGuess(e.target.value)} placeholder="Twoja odpowiedź: tytuł ${dict.or} wykonawca..." style={{ flex: 1 }} />
-                <button type="submit">${dict.guess}</button>
+              <form onSubmit={sendGuess} className="row">
+                <input
+                  className="input"
+                  value={guess}
+                  onChange={(e) => setGuess(e.target.value)}
+                  placeholder={dict.yourAnswer}
+                  style={{ flex: 1 }}
+                />
+                <button className="btn" type="submit">
+                  {dict.guess}
+                </button>
               </form>
 
               {lastResult && (
-                <div style={{ padding: 12, background: "#f0fff4", border: "1px solid #baf2c1", borderRadius: 8 }}>
-                  <b>{dict.winner(lastResult.winner, Math.round(lastResult.elapsedMs/100)/10)}</b><br/>
-                  {dict.itWas(lastResult.answer.title, lastResult.answer.artist)}
+                <div
+                  className="card"
+                  style={{
+                    borderColor: "rgba(16,185,129,.35)",
+                    background:
+                      "linear-gradient(180deg, rgba(16,185,129,.12), rgba(16,185,129,.06))",
+                  }}>
+                  <b>
+                    {dict.winner(
+                      lastResult.winner,
+                      Math.round(lastResult.elapsedMs / 100) / 10
+                    )}
+                  </b>
+                  <br />
+                  {dict.itWas(
+                    lastResult.answer.title,
+                    lastResult.answer.artist
+                  )}
                 </div>
               )}
 
               {isHost && (
-                <button onClick={nextRound}>${dict.nextRound}</button>
+                <button className="btn ghost" onClick={nextRound}>
+                  {dict.nextRound}
+                </button>
               )}
             </div>
           )}
         </Section>
       )}
 
-      <Section title="${dict.instructions}">
+      <Section title={dict.instructions}>
         <ol>
-          {dict.steps.map((s,i)=>(<li key={i}>{s}</li>))}
+          {dict.steps.map((s, i) => (
+            <li key={i}>{s}</li>
+          ))}
         </ol>
       </Section>
     </div>
