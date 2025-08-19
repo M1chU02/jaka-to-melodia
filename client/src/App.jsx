@@ -112,7 +112,7 @@ export default function App() {
     if (player?.stopVideo) player.stopVideo();
   });
 
-  // NEW: pauza dla wszystkich po pierwszym „buzz”
+  // pauza dla wszystkich po pierwszym „buzz”
   useSocketEvent("pausePlayback", () => {
     if (audioRef.current) audioRef.current.pause();
     const player = ytRef.current?.internalPlayer || ytRef.current;
@@ -123,21 +123,37 @@ export default function App() {
   useSocketEvent("buzzed", (payload) => setFirstBuzz(payload));
 
   // ===== Actions =====
+  function goHome() {
+    // prosty reset do ekranu powitalnego
+    setStage("welcome");
+    setRoomCode("");
+    setParsed(null);
+    setRound(null);
+    setLastResult(null);
+    setFirstBuzz(null);
+    if (audioRef.current) audioRef.current.pause();
+    const player = ytRef.current?.internalPlayer || ytRef.current;
+    if (player?.stopVideo) player.stopVideo();
+  }
+
   function createRoom() {
     socket.emit("createRoom", ({ code }) => {
       setRoomCode(code);
       setIsHost(true);
       setStage("lobby");
-      setName((n) => n || "Host");
-      socket.emit("joinRoom", { code, name: name || "Host" }, () => {});
+      // Ustal nazwę hosta jeśli puste pole
+      const finalName = name?.trim() || "Host";
+      setName(finalName);
+      socket.emit("joinRoom", { code, name: finalName }, () => {});
     });
   }
 
   function joinRoom() {
     if (!roomCode) return;
+    const finalName = name?.trim() || "Gracz";
     socket.emit(
       "joinRoom",
-      { code: roomCode.toUpperCase(), name: name || "Gracz" },
+      { code: roomCode.toUpperCase(), name: finalName },
       (resp) => {
         if (resp?.error) return alert(resp.error);
         setRoomCode(roomCode.toUpperCase());
@@ -222,7 +238,6 @@ export default function App() {
     );
   }
 
-  // NEW: odejmowanie punktów
   function deductPoints(playerName) {
     socket.emit(
       "deductPoints",
@@ -239,14 +254,29 @@ export default function App() {
     });
   }
 
+  function applyNewName() {
+    const newName = name?.trim();
+    if (!newName) return;
+    if (!roomCode) return; // poza pokojem nie wysyłamy
+    socket.emit("setName", { code: roomCode, name: newName }, (resp) => {
+      if (resp?.error) alert(resp.error);
+    });
+  }
+
   return (
     <div className="container">
       {/* Header */}
       <div className="header">
-        <h1 className="h1">🎵 {dict.title}</h1>
+        <button className="logoBtn" onClick={goHome} title="Home">
+          <span style={{ fontSize: 28 }}>🎵</span>
+          <h1 className="h1">{dict.title}</h1>
+        </button>
         <div className="row">
           <span className="kbd">{dict.language}:</span>
-          <select value={lang} onChange={(e) => setLang(e.target.value)}>
+          <select
+            className="select"
+            value={lang}
+            onChange={(e) => setLang(e.target.value)}>
             <option value="pl">{dict.polish}</option>
             <option value="en">{dict.english}</option>
           </select>
@@ -294,6 +324,20 @@ export default function App() {
                   </li>
                 ))}
               </ul>
+
+              {/* Edycja własnej nazwy */}
+              <div className="row" style={{ marginTop: 8 }}>
+                <input
+                  className="input"
+                  style={{ minWidth: 180 }}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={dict.yourName}
+                />
+                <button className="btn ghost" onClick={applyNewName}>
+                  Zmień
+                </button>
+              </div>
             </div>
 
             <div style={{ flex: 2, minWidth: 320 }}>
@@ -301,7 +345,13 @@ export default function App() {
               <div className="chatbox">
                 {chatLog.map((m, i) => (
                   <div key={i}>
-                    <b>{m.name}:</b> {m.text}
+                    {m.system ? (
+                      <i style={{ color: "#9aa5b1" }}>{m.text}</i>
+                    ) : (
+                      <>
+                        <b>{m.name}:</b> {m.text}
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
@@ -354,6 +404,7 @@ export default function App() {
             <div className="row">
               <span className="kbd">{dict.gameMode}:</span>
               <select
+                className="select"
                 value={gameType}
                 onChange={(e) => setGameType(e.target.value)}>
                 <option value="text">{dict.textMode}</option>
@@ -371,7 +422,7 @@ export default function App() {
                 </button>
               </div>
             ) : (
-              <p className="badge">{dict.note}</p>
+              <p className="kbd">{dict.note}</p>
             )}
           </div>
         </Section>
@@ -409,12 +460,13 @@ export default function App() {
           {round && (
             <div className="grid">
               <div>
-                <div className="badge">
+                <div className="kbd">
                   {dict.hint(round.hint?.titleLen, round.hint?.artistLen)}
                 </div>
 
                 {round.playback?.type === "audio" && (
                   <audio
+                    className="audio"
                     ref={audioRef}
                     controls
                     src={round.playback.previewUrl}
@@ -435,7 +487,7 @@ export default function App() {
                         e.target.playVideo();
                       }}
                     />
-                    <div className="badge">{dict.hiddenYT}</div>
+                    <div className="kbd">{dict.hiddenYT}</div>
                   </div>
                 )}
               </div>
@@ -459,7 +511,7 @@ export default function App() {
                     {firstBuzz?.name ? (
                       <b>{dict.firstBuzz(firstBuzz.name)}</b>
                     ) : (
-                      <span className="badge">{dict.noBuzzYet}</span>
+                      <span className="kbd">{dict.noBuzzYet}</span>
                     )}
                   </div>
                   <div className="row">
@@ -470,7 +522,7 @@ export default function App() {
                   {isHost && (
                     <div className="row" style={{ alignItems: "center" }}>
                       <span className="kbd">{dict.awardPoints}:</span>
-                      <select id="award-select" className="input">
+                      <select id="award-select" className="select">
                         {(roomState?.players || []).map((p) => (
                           <option
                             key={p.name}
@@ -488,7 +540,6 @@ export default function App() {
                         }}>
                         +10
                       </button>
-                      {/* NEW: odejmowanie punktów */}
                       <button
                         className="btn"
                         onClick={() => {

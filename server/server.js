@@ -173,26 +173,51 @@ io.on("connection", (socket) => {
   // Join room
   socket.on("joinRoom", ({ code, name }, cb) => {
     const room = getRoom(code);
-    if (!room) {
-      return cb && cb({ error: "Room does not exist." });
+    if (!room) return cb && cb({ error: "Room does not exist." });
+
+    const cleanName = (name || "").trim().slice(0, 32) || "Player";
+    let finalName = cleanName;
+    let i = 1;
+    while ([...room.users.values()].some((u) => u.name === finalName)) {
+      finalName = `${cleanName}#${i++}`;
     }
+
+    room.users.set(socket.id, { name: finalName, score: 0 });
+
     socket.join(code);
-    room.users.set(socket.id, { name: name?.trim() || "Gracz", score: 0 });
-    cb && cb({ ok: true, code, hostId: room.hostId });
+
+    io.to(code).emit("chat", {
+      system: true,
+      text: `${finalName} joined the room`,
+    });
+
     broadcastRoom(code);
+    cb && cb({ ok: true, hostId: room.hostId });
   });
 
   // Leave room / disconnect
   socket.on("disconnect", () => {
-    for (const room of rooms.values()) {
-      if (room.users.has(socket.id)) {
-        room.users.delete(socket.id);
-        if (room.hostId === socket.id) {
-          // Transfer host if possible
-          const first = [...room.users.keys()][0];
-          room.hostId = first || null;
-        }
-        broadcastRoom(room.code);
+    for (const [code, room] of rooms.entries()) {
+      if (!room.users.has(socket.id)) continue;
+      const user = room.users.get(socket.id);
+      room.users.delete(socket.id);
+
+      if (user) {
+        io.to(code).emit("chat", {
+          system: true,
+          text: `${user.name} left the room`,
+        });
+      }
+
+      if (room.hostId === socket.id) {
+        const next = [...room.users.keys()][0];
+        room.hostId = next || null;
+      }
+
+      if (room.users.size === 0) {
+        rooms.delete(code);
+      } else {
+        broadcastRoom(code);
       }
     }
   });
@@ -219,6 +244,27 @@ io.on("connection", (socket) => {
       cb({
         error: "Use the REST endpoint /api/parse-playlist from the frontend.",
       });
+  });
+
+  socket.on("setName", ({ code, name }, cb) => {
+    const room = getRoom(code);
+    if (!room) return cb && cb({ error: "Room does not exist." });
+    const user = room.users.get(socket.id);
+    if (!user) return cb && cb({ error: "Player not in room." });
+
+    const newName = (name || "").trim().slice(0, 32);
+    if (!newName) return cb && cb({ error: "Name required." });
+
+    // Unikalność (prosta) — dopisz sufiks, jeśli zajęte
+    const taken = [...room.users.values()].some(
+      (u) => u !== user && u.name === newName
+    );
+    user.name = taken
+      ? `${newName}#${Math.floor(Math.random() * 99) + 1}`
+      : newName;
+
+    broadcastRoom(code);
+    cb && cb({ ok: true, name: user.name });
   });
 
   // Start game (host only)
