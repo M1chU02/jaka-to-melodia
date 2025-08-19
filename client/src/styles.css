@@ -3,8 +3,8 @@
   --card: #0d1220;
   --muted: #9aa5b1;
   --text: #e5e7eb;
-  --accent: #7c3aed; /* fiolet */
-  --accent-2: #22d3ee; /* cyjan */
+  --accent: #7c3aed;
+  --accent-2: #22d3ee;
   --border: #1f2937;
   --success: #10b981;
   --danger: #ef4444;
@@ -144,17 +144,35 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.25);
 }
 .select {
+  background: #1f2937;
+  color: #e5e7eb;
+  border: 1px solid #374151;
+  border-radius: 12px;
+  padding: 6px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  outline: none;
   appearance: none;
-  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
-    linear-gradient(135deg, var(--muted) 50%, transparent 50%),
-    linear-gradient(to right, #1f2937, #1f2937);
-  background-position: calc(100% - 18px) calc(50% - 4px),
-    calc(100% - 12px) calc(50% - 4px), calc(100% - 36px) 50%;
-  background-size: 6px 6px, 6px 6px, 1px 60%;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  transition: all 0.2s ease;
+  background-image: url("data:image/svg+xml;utf8,<svg fill='%23e5e7eb' height='16' viewBox='0 0 24 24' width='16' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>");
   background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 16px;
+  padding-right: 32px;
 }
 .select:hover {
-  border-color: #324158;
+  border-color: #8b5cf6;
+  box-shadow: 0 0 6px rgba(139, 92, 246, 0.4);
+}
+.select:focus {
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.3);
+}
+.select option {
+  background: #111827;
+  color: #f9fafb;
 }
 
 .btn {
