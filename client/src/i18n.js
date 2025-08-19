@@ -1,0 +1,91 @@
+export const dictionaries = {
+  pl: {
+    title: "🎵 Jaka to melodia — online",
+    subtitle: "Wklej playlistę ze Spotify lub YouTube i zagraj ze znajomymi w czasie rzeczywistym.",
+    enterGame: "Wejdź do gry",
+    yourName: "Twoje imię",
+    roomCodePlaceholder: "Kod pokoju (np. ABC123)",
+    join: "Dołącz",
+    or: "lub",
+    createRoom: "Utwórz pokój",
+    room: "Pokój",
+    players: "Gracze",
+    chat: "Czat",
+    send: "Wyślij",
+    gameSettings: "Ustawienia gry (Host)",
+    pastePlaylist: "Wklej link do playlisty Spotify lub YouTube",
+    loadPlaylist: "Wczytaj playlistę",
+    loading: "Ładowanie...",
+    loaded: "Załadowano",
+    playable: "odtwarzalne",
+    startGame: "Rozpocznij grę",
+    nextRound: "Następna runda",
+    note: "Uwaga: dla Spotify używamy 30-sekundowych podglądów (preview). Dla YouTube wymagany jest klucz API po stronie serwera.",
+    round: "Runda",
+    startRound: "Start rundy",
+    hint: (tlen, alen) => `Podpowiedź: tytuł ma ${tlen} znaków, wykonawca ${alen}.`,
+    hiddenYT: "Odtwarzanie z YouTube (ukryte wideo).",
+    yourAnswer: "Twoja odpowiedź: tytuł lub wykonawca...",
+    guess: "Zgadnij!",
+    winner: (name, seconds) => `✅ ${name} zgadł/a w ${seconds}s!`,
+    itWas: (title, artist) => `To było: ${title}${artist ? ` — ${artist}` : ""}`,
+    instructions: "Instrukcja",
+    steps: [
+      "Utwórz pokój lub dołącz kodem.",
+      "Host wkleja link do playlisty (Spotify / YouTube) i klika „Wczytaj playlistę”.",
+      "Host startuje grę i uruchamia rundy. Wszyscy słyszą ten sam utwór.",
+      "Pisz odpowiedź (tytuł lub wykonawca). Pierwsza poprawna odpowiedź wygrywa rundę."
+    ],
+    language: "Język",
+    polish: "Polski",
+    english: "Angielski"
+  },
+  en: {
+    title: "🎵 Name That Tune — online",
+    subtitle: "Paste a Spotify or YouTube playlist and play with friends in real time.",
+    enterGame: "Enter game",
+    yourName: "Your name",
+    roomCodePlaceholder: "Room code (e.g., ABC123)",
+    join: "Join",
+    or: "or",
+    createRoom: "Create room",
+    room: "Room",
+    players: "Players",
+    chat: "Chat",
+    send: "Send",
+    gameSettings: "Game settings (Host)",
+    pastePlaylist: "Paste a Spotify or YouTube playlist link",
+    loadPlaylist: "Load playlist",
+    loading: "Loading...",
+    loaded: "Loaded",
+    playable: "playable",
+    startGame: "Start game",
+    nextRound: "Next round",
+    note: "Note: For Spotify we use 30-second previews. For YouTube you need a server API key.",
+    round: "Round",
+    startRound: "Start round",
+    hint: (tlen, alen) => `Hint: title has ${tlen} characters, artist ${alen}.`,
+    hiddenYT: "Playing from YouTube (hidden video).",
+    yourAnswer: "Your answer: title or artist...",
+    guess: "Guess!",
+    winner: (name, seconds) => `✅ ${name} guessed in ${seconds}s!`,
+    itWas: (title, artist) => `It was: ${title}${artist ? ` — ${artist}` : ""}`,
+    instructions: "Instructions",
+    steps: [
+      "Create a room or join with a code.",
+      "Host pastes a playlist link (Spotify / YouTube) and clicks “Load playlist”.",
+      "Host starts the game and rounds. Everyone hears the same track.",
+      "Type your answer (title or artist). First correct answer wins the round."
+    ],
+    language: "Language",
+    polish: "Polish",
+    english: "English"
+  }
+};
+
+export function getInitialLang() {
+  const saved = localStorage.getItem("lang");
+  if (saved === "pl" || saved === "en") return saved;
+  // default to PL (as requested), but detect browser if you want:
+  return "pl";
+}
