@@ -1,10 +1,14 @@
 import express from "express";
 import cors from "cors";
+import axios from "axios";
 import dotenv from "dotenv";
 import http from "http";
 import { Server } from "socket.io";
 import { nanoid } from "nanoid";
-import { fetchSpotifyPlaylistTracks, parseSpotifyPlaylistId } from "./spotify.js";
+import {
+  fetchSpotifyPlaylistTracks,
+  parseSpotifyPlaylistId,
+} from "./spotify.js";
 import { fetchYouTubePlaylist, parseYouTubePlaylistId } from "./youtube.js";
 import { isGuessCorrect, normalize } from "./utils.js";
 
@@ -12,13 +16,15 @@ dotenv.config();
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
-app.use(cors({
-  origin: process.env.CLIENT_ORIGIN?.split(",") || "*"
-}));
+app.use(
+  cors({
+    origin: process.env.CLIENT_ORIGIN?.split(",") || "*",
+  })
+);
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: process.env.CLIENT_ORIGIN?.split(",") || "*" }
+  cors: { origin: process.env.CLIENT_ORIGIN?.split(",") || "*" },
 });
 
 const PORT = process.env.PORT || 4000;
@@ -30,6 +36,41 @@ const rooms = new Map();
 //   tracks: [ ... ], answersKnown: boolean,
 //   currentRound: { startedAt, answer: {title, artist}, track: {...}, solved: false },
 // }
+async function buildPlaybackForTrack(track, mode) {
+  // 1) Spotify preview dostępne — korzystamy
+  if (mode === "spotify" && track.previewUrl) {
+    return { type: "audio", previewUrl: track.previewUrl, cover: track.cover };
+  }
+
+  // 2) Fallback do YouTube (wymaga YT_API_KEY)
+  if (process.env.YT_API_KEY && track.title) {
+    const q = [track.title, track.artist].filter(Boolean).join(" ");
+    try {
+      const r = await axios.get(
+        "https://www.googleapis.com/youtube/v3/search",
+        {
+          params: {
+            key: process.env.YT_API_KEY,
+            q,
+            type: "video",
+            maxResults: 1,
+            videoEmbeddable: "true",
+            part: "snippet",
+          },
+        }
+      );
+      const item = r.data.items?.[0];
+      if (item?.id?.videoId) {
+        return { type: "youtube", videoId: item.id.videoId };
+      }
+    } catch (e) {
+      console.warn("YT fallback error:", e?.response?.data || e.message);
+    }
+  }
+
+  // 3) Nic nie znaleziono
+  return null;
+}
 
 function newRoomCode() {
   // 6-letter friendly code
@@ -46,13 +87,18 @@ function broadcastRoom(code) {
   const payload = {
     code: room.code,
     mode: room.mode || null,
-    players: [...room.users.values()].map(u => ({ name: u.name, score: u.score })),
+    players: [...room.users.values()].map((u) => ({
+      name: u.name,
+      score: u.score,
+    })),
     hostId: room.hostId,
     hasTracks: !!(room.tracks && room.tracks.length),
-    currentRound: room.currentRound ? {
-      startedAt: room.currentRound.startedAt,
-      solved: room.currentRound.solved,
-    } : null
+    currentRound: room.currentRound
+      ? {
+          startedAt: room.currentRound.startedAt,
+          solved: room.currentRound.solved,
+        }
+      : null,
   };
   io.to(code).emit("roomState", payload);
 }
@@ -64,32 +110,44 @@ app.post("/api/parse-playlist", async (req, res) => {
     if (!url) return res.status(400).json({ error: "Missing playlist URL." });
 
     if (parseSpotifyPlaylistId(url)) {
-      if (!process.env.SPOTIFY_CLIENT_ID || !process.env.SPOTIFY_CLIENT_SECRET) {
-        return res.status(400).json({ error: "Spotify API is not configured on the server." });
+      if (
+        !process.env.SPOTIFY_CLIENT_ID ||
+        !process.env.SPOTIFY_CLIENT_SECRET
+      ) {
+        return res
+          .status(400)
+          .json({ error: "Spotify API is not configured on the server." });
       }
       const data = await fetchSpotifyPlaylistTracks({
         url,
         clientId: process.env.SPOTIFY_CLIENT_ID,
-        clientSecret: process.env.SPOTIFY_CLIENT_SECRET
+        clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
       });
       return res.json(data);
     }
 
     if (parseYouTubePlaylistId(url)) {
       if (!process.env.YT_API_KEY) {
-        return res.status(400).json({ error: "Missing YT_API_KEY for YouTube Data API." });
+        return res
+          .status(400)
+          .json({ error: "Missing YT_API_KEY for YouTube Data API." });
       }
       const data = await fetchYouTubePlaylist({
         url,
-        apiKey: process.env.YT_API_KEY
+        apiKey: process.env.YT_API_KEY,
       });
       return res.json(data);
     }
 
-    return res.status(400).json({ error: "Unrecognized playlist type. Paste a Spotify or YouTube playlist link." });
+    return res.status(400).json({
+      error:
+        "Unrecognized playlist type. Paste a Spotify or YouTube playlist link.",
+    });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ error: e.message || "Server error while parsing playlist." });
+    return res
+      .status(500)
+      .json({ error: e.message || "Server error while parsing playlist." });
   }
 });
 
@@ -105,7 +163,7 @@ io.on("connection", (socket) => {
       mode: null,
       tracks: [],
       answersKnown: false,
-      currentRound: null
+      currentRound: null,
     });
     socket.join(code);
     cb && cb({ code });
@@ -143,28 +201,34 @@ io.on("connection", (socket) => {
   socket.on("loadPlaylist", async ({ code, url }, cb) => {
     const room = getRoom(code);
     if (!room) return cb && cb({ error: "Room does not exist." });
-    if (room.hostId !== socket.id) return cb && cb({ error: "Only the host can load the playlist." });
+    if (room.hostId !== socket.id)
+      return cb && cb({ error: "Only the host can load the playlist." });
 
     try {
       const resp = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url })
+        body: JSON.stringify({ url }),
       });
       // This fetch won't work here (server-side socket handler). We'll proxy via REST client call on frontend instead.
       // Safeguard: never used.
     } catch (e) {
       // noop
     }
-    cb && cb({ error: "Use the REST endpoint /api/parse-playlist from the frontend." });
+    cb &&
+      cb({
+        error: "Use the REST endpoint /api/parse-playlist from the frontend.",
+      });
   });
 
   // Start game (host only)
   socket.on("startGame", ({ code, mode, tracks }, cb) => {
     const room = getRoom(code);
     if (!room) return cb && cb({ error: "Room does not exist." });
-    if (room.hostId !== socket.id) return cb && cb({ error: "Only the host can start the game." });
-    if (!tracks || !tracks.length) return cb && cb({ error: "No tracks loaded." });
+    if (room.hostId !== socket.id)
+      return cb && cb({ error: "Only the host can start the game." });
+    if (!tracks || !tracks.length)
+      return cb && cb({ error: "No tracks loaded." });
 
     room.mode = mode;
     room.tracks = tracks;
@@ -176,39 +240,49 @@ io.on("connection", (socket) => {
   });
 
   // Next round (host only)
-  socket.on("nextRound", ({ code }, cb) => {
+  socket.on("nextRound", async ({ code }, cb) => {
     const room = getRoom(code);
     if (!room) return cb && cb({ error: "Room does not exist." });
-    if (room.hostId !== socket.id) return cb && cb({ error: "Only the host can start a round." });
-    if (!room.tracks || !room.tracks.length) return cb && cb({ error: "No tracks available." });
+    if (room.hostId !== socket.id)
+      return cb && cb({ error: "Only the host can start a round." });
+    if (!room.tracks || !room.tracks.length)
+      return cb && cb({ error: "No tracks available." });
 
-    // pick a random track
-    const pool = room.mode === "spotify"
-      ? room.tracks.filter(t => t.previewUrl) // playable only
-      : room.tracks;
-    if (!pool.length) return cb && cb({ error: "No playable tracks (Spotify previews)." });
+    // Nie filtrujemy po preview — dajemy szansę fallbackowi do YT
+    const pool = room.tracks.slice();
+    let track = null,
+      playback = null;
 
-    const track = pool[Math.floor(Math.random() * pool.length)];
+    // Kilka prób wylosowania czegoś, co da się odtworzyć
+    for (let i = 0; i < Math.min(20, pool.length); i++) {
+      const candidate = pool[Math.floor(Math.random() * pool.length)];
+      const pb = await buildPlaybackForTrack(candidate, room.mode);
+      if (pb) {
+        track = candidate;
+        playback = pb;
+        break;
+      }
+    }
+
+    if (!track || !playback) {
+      return cb && cb({ error: "No playable tracks (Spotify previews)." });
+    }
+
     room.currentRound = {
       startedAt: Date.now(),
       answer: { title: track.title, artist: track.artist || "" },
       track,
-      solved: false
+      solved: false,
     };
 
-    // Prepare client payload
     const payload = {
       mode: room.mode,
       startedAt: room.currentRound.startedAt,
-      // Hints
       hint: {
         titleLen: track.title ? track.title.length : 0,
-        artistLen: track.artist ? track.artist.length : 0
+        artistLen: track.artist ? track.artist.length : 0,
       },
-      // Playback data
-      playback: room.mode === "spotify"
-        ? { type: "audio", previewUrl: track.previewUrl, cover: track.cover }
-        : { type: "youtube", videoId: track.id },
+      playback,
     };
 
     io.to(code).emit("roundStart", payload);
@@ -218,8 +292,10 @@ io.on("connection", (socket) => {
   // Guessing
   socket.on("guess", ({ code, guessText }, cb) => {
     const room = getRoom(code);
-    if (!room || !room.currentRound) return cb && cb({ error: "Round is not active." });
-    if (room.currentRound.solved) return cb && cb({ error: "Round is already finished." });
+    if (!room || !room.currentRound)
+      return cb && cb({ error: "Round is not active." });
+    if (room.currentRound.solved)
+      return cb && cb({ error: "Round is already finished." });
 
     const { title, artist } = room.currentRound.answer;
     const correct = isGuessCorrect(guessText || "", title, artist);
@@ -238,7 +314,10 @@ io.on("connection", (socket) => {
       winner: player?.name || "Ktoś",
       answer: { title, artist },
       elapsedMs,
-      scores: [...room.users.values()].map(u => ({ name: u.name, score: u.score }))
+      scores: [...room.users.values()].map((u) => ({
+        name: u.name,
+        score: u.score,
+      })),
     });
     broadcastRoom(code);
     cb && cb({ ok: true, correct: true });
