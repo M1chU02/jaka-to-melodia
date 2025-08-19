@@ -84,10 +84,12 @@ export default function App() {
 
   // ===== Sockets =====
   useSocketEvent("roomState", (payload) => setRoomState(payload));
+
   useSocketEvent("gameStarted", (payload) => {
     if (payload?.gameType) setGameType(payload.gameType);
     setStage("playing");
   });
+
   useSocketEvent("roundStart", (payload) => {
     setLastResult(null);
     setRound(payload);
@@ -101,6 +103,7 @@ export default function App() {
       }, 40);
     }
   });
+
   useSocketEvent("roundEnd", (payload) => {
     setLastResult(payload);
     setFirstBuzz(null);
@@ -108,6 +111,14 @@ export default function App() {
     const player = ytRef.current?.internalPlayer || ytRef.current;
     if (player?.stopVideo) player.stopVideo();
   });
+
+  // NEW: pauza dla wszystkich po pierwszym „buzz”
+  useSocketEvent("pausePlayback", () => {
+    if (audioRef.current) audioRef.current.pause();
+    const player = ytRef.current?.internalPlayer || ytRef.current;
+    if (player?.pauseVideo) player.pauseVideo();
+  });
+
   useSocketEvent("chat", (msg) => setChatLog((prev) => [...prev, msg]));
   useSocketEvent("buzzed", (payload) => setFirstBuzz(payload));
 
@@ -204,6 +215,17 @@ export default function App() {
   function awardPoints(playerName) {
     socket.emit(
       "awardPoints",
+      { code: roomCode, playerName, points: 10 },
+      (resp) => {
+        if (resp?.error) alert(resp.error);
+      }
+    );
+  }
+
+  // NEW: odejmowanie punktów
+  function deductPoints(playerName) {
+    socket.emit(
+      "deductPoints",
       { code: roomCode, playerName, points: 10 },
       (resp) => {
         if (resp?.error) alert(resp.error);
@@ -465,6 +487,15 @@ export default function App() {
                           if (sel?.value) awardPoints(sel.value);
                         }}>
                         +10
+                      </button>
+                      {/* NEW: odejmowanie punktów */}
+                      <button
+                        className="btn"
+                        onClick={() => {
+                          const sel = document.getElementById("award-select");
+                          if (sel?.value) deductPoints(sel.value);
+                        }}>
+                        -10
                       </button>
                       <button className="btn ghost" onClick={endRoundManual}>
                         {dict.endRound}

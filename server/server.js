@@ -277,7 +277,7 @@ io.on("connection", (socket) => {
       answer: { title: track.title, artist: track.artist || "" },
       track,
       solved: false,
-      buzzer: { winnerId: null, winnerName: null, ts: null }, // NEW
+      buzzer: { winnerId: null, winnerName: null, ts: null },
     };
 
     const payload = {
@@ -285,8 +285,8 @@ io.on("connection", (socket) => {
       gameType: room.gameType,
       startedAt: room.currentRound.startedAt,
       hint: {
-        titleLen: track.title ? track.title.length : 0,
-        artistLen: track.artist ? track.artist.length : 0,
+        titleLen: track.title?.length || 0,
+        artistLen: track.artist?.length || 0,
       },
       playback,
     };
@@ -351,6 +351,10 @@ io.on("connection", (socket) => {
 
     r.buzzer = { winnerId: socket.id, winnerName: player.name, ts: Date.now() };
     io.to(code).emit("buzzed", { name: player.name, at: r.buzzer.ts });
+
+    // NEW: zatrzymaj odtwarzanie u wszystkich
+    io.to(code).emit("pausePlayback");
+
     cb && cb({ ok: true });
   });
 
@@ -368,6 +372,26 @@ io.on("connection", (socket) => {
     );
     if (!entry) return cb && cb({ error: "Player not found." });
     entry[1].score += Number(points) || 0;
+    broadcastRoom(code);
+    cb && cb({ ok: true });
+  });
+
+  socket.on("deductPoints", ({ code, playerName, points }, cb) => {
+    const room = getRoom(code);
+    if (!room) return cb && cb({ error: "Room does not exist." });
+    if (room.hostId !== socket.id)
+      return cb && cb({ error: "Only the host can deduct points." });
+    if (room.gameType !== "buzzer")
+      return cb && cb({ error: "Not in buzzer mode." });
+
+    const entry = [...room.users.entries()].find(
+      ([id, u]) => u.name === playerName
+    );
+    if (!entry) return cb && cb({ error: "Player not found." });
+
+    entry[1].score -= Number(points) || 0;
+    if (entry[1].score < 0) entry[1].score = 0; // nie schodzimy poniżej zera
+
     broadcastRoom(code);
     cb && cb({ ok: true });
   });
