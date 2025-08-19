@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import io from "socket.io-client";
 import YouTube from "react-youtube";
 import { dictionaries, getInitialLang } from "./i18n.js";
+import CustomSelect from "./components/CustomSelect.jsx";
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:4000";
 const socket = io(SERVER_URL, { transports: ["websocket"] });
@@ -58,6 +59,9 @@ export default function App() {
   // ===== Game mode =====
   const [gameType, setGameType] = useState("text"); // "text" | "buzzer"
   const [firstBuzz, setFirstBuzz] = useState(null);
+
+  // ===== Award panel (host) =====
+  const [awardPlayer, setAwardPlayer] = useState("");
 
   // ===== Players (media refs) =====
   const audioRef = useRef(null);
@@ -122,9 +126,24 @@ export default function App() {
   useSocketEvent("chat", (msg) => setChatLog((prev) => [...prev, msg]));
   useSocketEvent("buzzed", (payload) => setFirstBuzz(payload));
 
+  // awardPlayer -> automatycznie wybierz firstBuzz lub pierwszego gracza
+  useEffect(() => {
+    const players = roomState?.players || [];
+    if (!players.length) {
+      setAwardPlayer("");
+      return;
+    }
+    if (firstBuzz?.name) {
+      setAwardPlayer(firstBuzz.name);
+      return;
+    }
+    if (!players.some((p) => p.name === awardPlayer)) {
+      setAwardPlayer(players[0].name);
+    }
+  }, [roomState?.players, firstBuzz]);
+
   // ===== Actions =====
   function goHome() {
-    // prosty reset do ekranu powitalnego
     setStage("welcome");
     setRoomCode("");
     setParsed(null);
@@ -141,7 +160,6 @@ export default function App() {
       setRoomCode(code);
       setIsHost(true);
       setStage("lobby");
-      // Ustal nazwę hosta jeśli puste pole
       const finalName = name?.trim() || "Host";
       setName(finalName);
       socket.emit("joinRoom", { code, name: finalName }, () => {});
@@ -256,12 +274,25 @@ export default function App() {
 
   function applyNewName() {
     const newName = name?.trim();
-    if (!newName) return;
-    if (!roomCode) return; // poza pokojem nie wysyłamy
+    if (!newName || !roomCode) return;
     socket.emit("setName", { code: roomCode, name: newName }, (resp) => {
       if (resp?.error) alert(resp.error);
     });
   }
+
+  // ===== Options for CustomSelects =====
+  const langOptions = [
+    { value: "pl", label: dict.polish },
+    { value: "en", label: dict.english },
+  ];
+  const modeOptions = [
+    { value: "text", label: dict.textMode },
+    { value: "buzzer", label: dict.voiceMode },
+  ];
+  const playerOptions = (roomState?.players || []).map((p) => ({
+    value: p.name,
+    label: p.name,
+  }));
 
   return (
     <div className="container">
@@ -273,13 +304,11 @@ export default function App() {
         </button>
         <div className="row">
           <span className="kbd">{dict.language}:</span>
-          <select
-            className="select"
+          <CustomSelect
+            options={langOptions}
             value={lang}
-            onChange={(e) => setLang(e.target.value)}>
-            <option value="pl">{dict.polish}</option>
-            <option value="en">{dict.english}</option>
-          </select>
+            onChange={(val) => setLang(val)}
+          />
         </div>
       </div>
       <p className="subtitle">{dict.subtitle}</p>
@@ -403,13 +432,11 @@ export default function App() {
 
             <div className="row">
               <span className="kbd">{dict.gameMode}:</span>
-              <select
-                className="select"
+              <CustomSelect
+                options={modeOptions}
                 value={gameType}
-                onChange={(e) => setGameType(e.target.value)}>
-                <option value="text">{dict.textMode}</option>
-                <option value="buzzer">{dict.voiceMode}</option>
-              </select>
+                onChange={setGameType}
+              />
             </div>
 
             {parsed ? (
@@ -522,30 +549,19 @@ export default function App() {
                   {isHost && (
                     <div className="row" style={{ alignItems: "center" }}>
                       <span className="kbd">{dict.awardPoints}:</span>
-                      <select id="award-select" className="select">
-                        {(roomState?.players || []).map((p) => (
-                          <option
-                            key={p.name}
-                            value={p.name}
-                            selected={firstBuzz?.name === p.name}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </select>
+                      <CustomSelect
+                        options={playerOptions}
+                        value={awardPlayer}
+                        onChange={setAwardPlayer}
+                      />
                       <button
                         className="btn"
-                        onClick={() => {
-                          const sel = document.getElementById("award-select");
-                          if (sel?.value) awardPoints(sel.value);
-                        }}>
+                        onClick={() => awardPoints(awardPlayer)}>
                         +10
                       </button>
                       <button
                         className="btn"
-                        onClick={() => {
-                          const sel = document.getElementById("award-select");
-                          if (sel?.value) deductPoints(sel.value);
-                        }}>
+                        onClick={() => deductPoints(awardPlayer)}>
                         -10
                       </button>
                       <button className="btn ghost" onClick={endRoundManual}>
