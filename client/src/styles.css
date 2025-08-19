@@ -220,6 +220,7 @@ textarea:focus {
 /* Volume slider */
 .range {
   -webkit-appearance: none;
+  appearance: none;
   width: 200px;
   height: 6px;
   border-radius: 999px;
