@@ -145,3 +145,38 @@ textarea:focus {
 .audio {
   width: 100%;
 }
+
+/* Volume slider */
+.range {
+  -webkit-appearance: none;
+  width: 180px;
+  height: 6px;
+  border-radius: 999px;
+  background: #1f2937;
+  outline: none;
+}
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.25);
+}
+.range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+.muteBtn {
+  background: transparent;
+  border: 1px solid #253247;
+  color: var(--text);
+  border-radius: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+}

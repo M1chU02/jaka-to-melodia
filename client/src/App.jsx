@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import io from "socket.io-client";
 import YouTube from "react-youtube";
 import { dictionaries, getInitialLang } from "./i18n.js";
@@ -32,10 +32,12 @@ function Section({ title, children, toolbar }) {
 }
 
 export default function App() {
+  // ===== i18n =====
   const [lang, setLang] = useState(getInitialLang());
   const dict = dictionaries[lang];
   useEffect(() => localStorage.setItem("lang", lang), [lang]);
 
+  // ===== Lobby / game state =====
   const [stage, setStage] = useState("welcome"); // welcome, lobby, playing
   const [name, setName] = useState("");
   const [roomCode, setRoomCode] = useState("");
@@ -43,38 +45,66 @@ export default function App() {
   const [roomState, setRoomState] = useState(null);
   const [chatLog, setChatLog] = useState([]);
 
-  // Playlist management (host)
+  // ===== Playlist (host) =====
   const [playlistUrl, setPlaylistUrl] = useState("");
   const [parsed, setParsed] = useState(null);
   const [loadingPlaylist, setLoadingPlaylist] = useState(false);
 
-  // Round state
-  const [round, setRound] = useState(null);
+  // ===== Round =====
+  const [round, setRound] = useState(null); // { mode, startedAt, hint, playback }
   const [guess, setGuess] = useState("");
   const [lastResult, setLastResult] = useState(null);
-  const audioRef = useRef(null);
-  const ytRef = useRef(null);
 
+  // ===== Players (media refs) =====
+  const audioRef = useRef(null);
+  const ytRef = useRef(null); // YouTube player instance (IFrame API target)
+
+  // ===== Volume / mute =====
+  const [volume, setVolume] = useState(() => {
+    const saved = Number(localStorage.getItem("volume"));
+    return Number.isFinite(saved) ? Math.min(100, Math.max(0, saved)) : 80;
+  });
+  const [muted, setMuted] = useState(false);
+  useEffect(() => localStorage.setItem("volume", String(volume)), [volume]);
+
+  // Apply volume to <audio>
+  useEffect(() => {
+    if (!audioRef.current) return;
+    audioRef.current.volume = muted ? 0 : volume / 100;
+  }, [volume, muted]);
+
+  // Apply volume to YouTube
+  useEffect(() => {
+    const player = ytRef.current?.internalPlayer || ytRef.current;
+    if (!player?.setVolume) return;
+    player.setVolume(muted ? 0 : volume);
+  }, [volume, muted]);
+
+  // ===== Sockets =====
   useSocketEvent("roomState", (payload) => setRoomState(payload));
   useSocketEvent("gameStarted", () => setStage("playing"));
   useSocketEvent("roundStart", (payload) => {
     setLastResult(null);
     setRound(payload);
     setGuess("");
+    // Autoplay for audio previews
     setTimeout(() => {
       if (payload.playback?.type === "audio" && audioRef.current) {
         audioRef.current.currentTime = 0;
+        audioRef.current.volume = muted ? 0 : volume / 100;
         audioRef.current.play().catch(() => {});
       }
-    }, 50);
+    }, 40);
   });
   useSocketEvent("roundEnd", (payload) => {
     setLastResult(payload);
     if (audioRef.current) audioRef.current.pause();
-    if (ytRef.current) ytRef.current.internalPlayer?.stopVideo?.();
+    const player = ytRef.current?.internalPlayer || ytRef.current;
+    if (player?.stopVideo) player.stopVideo();
   });
   useSocketEvent("chat", (msg) => setChatLog((prev) => [...prev, msg]));
 
+  // ===== Actions =====
   function createRoom() {
     socket.emit("createRoom", ({ code }) => {
       setRoomCode(code);
@@ -153,8 +183,12 @@ export default function App() {
     input.value = "";
   }
 
+  const isSpotify = parsed?.source === "spotify";
+  const isYouTube = parsed?.source === "youtube";
+
   return (
     <div className="container">
+      {/* Header */}
       <div className="header">
         <h1 className="h1">🎵 {dict.title}</h1>
         <div className="row">
@@ -167,6 +201,7 @@ export default function App() {
       </div>
       <p className="subtitle">{dict.subtitle}</p>
 
+      {/* Welcome */}
       {stage === "welcome" && (
         <Section title={dict.enterGame}>
           <div className="row">
@@ -193,6 +228,7 @@ export default function App() {
         </Section>
       )}
 
+      {/* Lobby */}
       {stage !== "welcome" && (
         <Section title={`${dict.room}: ${roomCode}`}>
           <div className="row" style={{ alignItems: "flex-start" }}>
@@ -206,6 +242,7 @@ export default function App() {
                 ))}
               </ul>
             </div>
+
             <div style={{ flex: 2, minWidth: 320 }}>
               <h3>{dict.chat}</h3>
               <div className="chatbox">
@@ -234,6 +271,7 @@ export default function App() {
         </Section>
       )}
 
+      {/* Host controls */}
       {stage === "lobby" && isHost && (
         <Section title={dict.gameSettings}>
           <div className="grid">
@@ -259,6 +297,7 @@ export default function App() {
                 </span>
               )}
             </div>
+
             {parsed ? (
               <div className="row">
                 <button className="btn" onClick={startGame}>
@@ -275,19 +314,44 @@ export default function App() {
         </Section>
       )}
 
+      {/* Round */}
       {stage === "playing" && (
-        <Section title={dict.round}>
+        <Section
+          title={dict.round}
+          toolbar={
+            <div className="row">
+              <button className="muteBtn" onClick={() => setMuted((m) => !m)}>
+                {muted ? "🔇" : "🔊"}
+              </button>
+              <input
+                className="range"
+                type="range"
+                min="0"
+                max="100"
+                value={muted ? 0 : volume}
+                onChange={(e) => {
+                  setMuted(false);
+                  setVolume(Number(e.target.value));
+                }}
+                aria-label="Volume"
+              />
+              <span className="kbd">{muted ? 0 : volume}%</span>
+            </div>
+          }>
           {!round && isHost && (
             <button className="btn" onClick={nextRound}>
               {dict.startRound}
             </button>
           )}
+
           {round && (
             <div className="grid">
               <div>
                 <div className="badge">
                   {dict.hint(round.hint?.titleLen, round.hint?.artistLen)}
                 </div>
+
+                {/* Spotify preview */}
                 {round.playback?.type === "audio" && (
                   <audio
                     className="audio"
@@ -296,6 +360,8 @@ export default function App() {
                     src={round.playback.previewUrl}
                   />
                 )}
+
+                {/* YouTube fallback */}
                 {round.playback?.type === "youtube" && (
                   <div>
                     <YouTube
@@ -307,6 +373,9 @@ export default function App() {
                       }}
                       onReady={(e) => {
                         ytRef.current = e.target;
+                        try {
+                          e.target.setVolume(muted ? 0 : volume);
+                        } catch (_) {}
                         e.target.playVideo();
                       }}
                     />
@@ -360,6 +429,7 @@ export default function App() {
         </Section>
       )}
 
+      {/* Instructions */}
       <Section title={dict.instructions}>
         <ol>
           {dict.steps.map((s, i) => (
