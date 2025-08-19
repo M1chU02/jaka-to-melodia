@@ -51,13 +51,17 @@ export default function App() {
   const [loadingPlaylist, setLoadingPlaylist] = useState(false);
 
   // ===== Round =====
-  const [round, setRound] = useState(null); // { mode, startedAt, hint, playback }
+  const [round, setRound] = useState(null);
   const [guess, setGuess] = useState("");
   const [lastResult, setLastResult] = useState(null);
 
+  // ===== Game mode =====
+  const [gameType, setGameType] = useState("text"); // "text" | "buzzer"
+  const [firstBuzz, setFirstBuzz] = useState(null);
+
   // ===== Players (media refs) =====
   const audioRef = useRef(null);
-  const ytRef = useRef(null); // YouTube player instance (IFrame API target)
+  const ytRef = useRef(null);
 
   // ===== Volume / mute =====
   const [volume, setVolume] = useState(() => {
@@ -67,13 +71,11 @@ export default function App() {
   const [muted, setMuted] = useState(false);
   useEffect(() => localStorage.setItem("volume", String(volume)), [volume]);
 
-  // Apply volume to <audio>
   useEffect(() => {
     if (!audioRef.current) return;
     audioRef.current.volume = muted ? 0 : volume / 100;
   }, [volume, muted]);
 
-  // Apply volume to YouTube
   useEffect(() => {
     const player = ytRef.current?.internalPlayer || ytRef.current;
     if (!player?.setVolume) return;
@@ -82,27 +84,32 @@ export default function App() {
 
   // ===== Sockets =====
   useSocketEvent("roomState", (payload) => setRoomState(payload));
-  useSocketEvent("gameStarted", () => setStage("playing"));
+  useSocketEvent("gameStarted", (payload) => {
+    if (payload?.gameType) setGameType(payload.gameType);
+    setStage("playing");
+  });
   useSocketEvent("roundStart", (payload) => {
     setLastResult(null);
     setRound(payload);
     setGuess("");
-    // Autoplay for audio previews
-    setTimeout(() => {
-      if (payload.playback?.type === "audio" && audioRef.current) {
+    setFirstBuzz(null);
+    if (payload.playback?.type === "audio" && audioRef.current) {
+      setTimeout(() => {
         audioRef.current.currentTime = 0;
         audioRef.current.volume = muted ? 0 : volume / 100;
         audioRef.current.play().catch(() => {});
-      }
-    }, 40);
+      }, 40);
+    }
   });
   useSocketEvent("roundEnd", (payload) => {
     setLastResult(payload);
+    setFirstBuzz(null);
     if (audioRef.current) audioRef.current.pause();
     const player = ytRef.current?.internalPlayer || ytRef.current;
     if (player?.stopVideo) player.stopVideo();
   });
   useSocketEvent("chat", (msg) => setChatLog((prev) => [...prev, msg]));
+  useSocketEvent("buzzed", (payload) => setFirstBuzz(payload));
 
   // ===== Actions =====
   function createRoom() {
@@ -151,7 +158,12 @@ export default function App() {
     if (!parsed) return;
     socket.emit(
       "startGame",
-      { code: roomCode, mode: parsed.source, tracks: parsed.tracks },
+      {
+        code: roomCode,
+        mode: parsed.source,
+        tracks: parsed.tracks,
+        gameType,
+      },
       (resp) => {
         if (resp?.error) return alert(resp.error);
       }
@@ -183,8 +195,27 @@ export default function App() {
     input.value = "";
   }
 
-  const isSpotify = parsed?.source === "spotify";
-  const isYouTube = parsed?.source === "youtube";
+  function buzz() {
+    socket.emit("buzz", { code: roomCode }, (resp) => {
+      if (resp?.error) alert(resp.error);
+    });
+  }
+
+  function awardPoints(playerName) {
+    socket.emit(
+      "awardPoints",
+      { code: roomCode, playerName, points: 10 },
+      (resp) => {
+        if (resp?.error) alert(resp.error);
+      }
+    );
+  }
+
+  function endRoundManual() {
+    socket.emit("endRoundManual", { code: roomCode }, (resp) => {
+      if (resp?.error) alert(resp.error);
+    });
+  }
 
   return (
     <div className="container">
@@ -259,7 +290,7 @@ export default function App() {
                 <input
                   className="input"
                   name="msg"
-                  placeholder="Napisz wiadomość..."
+                  placeholder="..."
                   style={{ flex: 1 }}
                 />
                 <button className="btn" type="submit">
@@ -298,6 +329,16 @@ export default function App() {
               )}
             </div>
 
+            <div className="row">
+              <span className="kbd">{dict.gameMode}:</span>
+              <select
+                value={gameType}
+                onChange={(e) => setGameType(e.target.value)}>
+                <option value="text">{dict.textMode}</option>
+                <option value="buzzer">{dict.voiceMode}</option>
+              </select>
+            </div>
+
             {parsed ? (
               <div className="row">
                 <button className="btn" onClick={startGame}>
@@ -333,7 +374,6 @@ export default function App() {
                   setMuted(false);
                   setVolume(Number(e.target.value));
                 }}
-                aria-label="Volume"
               />
               <span className="kbd">{muted ? 0 : volume}%</span>
             </div>
@@ -351,17 +391,13 @@ export default function App() {
                   {dict.hint(round.hint?.titleLen, round.hint?.artistLen)}
                 </div>
 
-                {/* Spotify preview */}
                 {round.playback?.type === "audio" && (
                   <audio
-                    className="audio"
                     ref={audioRef}
                     controls
                     src={round.playback.previewUrl}
                   />
                 )}
-
-                {/* YouTube fallback */}
                 {round.playback?.type === "youtube" && (
                   <div>
                     <YouTube
@@ -373,9 +409,7 @@ export default function App() {
                       }}
                       onReady={(e) => {
                         ytRef.current = e.target;
-                        try {
-                          e.target.setVolume(muted ? 0 : volume);
-                        } catch (_) {}
+                        e.target.setVolume(muted ? 0 : volume);
                         e.target.playVideo();
                       }}
                     />
@@ -384,32 +418,71 @@ export default function App() {
                 )}
               </div>
 
-              <form onSubmit={sendGuess} className="row">
-                <input
-                  className="input"
-                  value={guess}
-                  onChange={(e) => setGuess(e.target.value)}
-                  placeholder={dict.yourAnswer}
-                  style={{ flex: 1 }}
-                />
-                <button className="btn" type="submit">
-                  {dict.guess}
-                </button>
-              </form>
+              {gameType === "text" ? (
+                <form onSubmit={sendGuess} className="row">
+                  <input
+                    className="input"
+                    value={guess}
+                    onChange={(e) => setGuess(e.target.value)}
+                    placeholder={dict.yourAnswer}
+                    style={{ flex: 1 }}
+                  />
+                  <button className="btn" type="submit">
+                    {dict.guess}
+                  </button>
+                </form>
+              ) : (
+                <div className="grid">
+                  <div className="card">
+                    {firstBuzz?.name ? (
+                      <b>{dict.firstBuzz(firstBuzz.name)}</b>
+                    ) : (
+                      <span className="badge">{dict.noBuzzYet}</span>
+                    )}
+                  </div>
+                  <div className="row">
+                    <button className="btn" onClick={buzz}>
+                      {dict.buzz}
+                    </button>
+                  </div>
+                  {isHost && (
+                    <div className="row" style={{ alignItems: "center" }}>
+                      <span className="kbd">{dict.awardPoints}:</span>
+                      <select id="award-select" className="input">
+                        {(roomState?.players || []).map((p) => (
+                          <option
+                            key={p.name}
+                            value={p.name}
+                            selected={firstBuzz?.name === p.name}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        className="btn"
+                        onClick={() => {
+                          const sel = document.getElementById("award-select");
+                          if (sel?.value) awardPoints(sel.value);
+                        }}>
+                        +10
+                      </button>
+                      <button className="btn ghost" onClick={endRoundManual}>
+                        {dict.endRound}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {lastResult && (
-                <div
-                  className="card"
-                  style={{
-                    borderColor: "rgba(16,185,129,.35)",
-                    background:
-                      "linear-gradient(180deg, rgba(16,185,129,.12), rgba(16,185,129,.06))",
-                  }}>
+                <div className="card">
                   <b>
-                    {dict.winner(
-                      lastResult.winner,
-                      Math.round(lastResult.elapsedMs / 100) / 10
-                    )}
+                    {lastResult.winner
+                      ? dict.winner(
+                          lastResult.winner,
+                          Math.round(lastResult.elapsedMs / 100) / 10
+                        )
+                      : ""}
                   </b>
                   <br />
                   {dict.itWas(
@@ -428,15 +501,6 @@ export default function App() {
           )}
         </Section>
       )}
-
-      {/* Instructions */}
-      <Section title={dict.instructions}>
-        <ol>
-          {dict.steps.map((s, i) => (
-            <li key={i}>{s}</li>
-          ))}
-        </ol>
-      </Section>
     </div>
   );
 }
