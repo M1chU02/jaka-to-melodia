@@ -37,12 +37,12 @@ const rooms = new Map();
 //   currentRound: { startedAt, answer: {title, artist}, track: {...}, solved: false },
 // }
 async function buildPlaybackForTrack(track, mode) {
-  // 1) Spotify preview dostępne — korzystamy
+  // 1) Spotify preview available — use it
   if (mode === "spotify" && track.previewUrl) {
     return { type: "audio", previewUrl: track.previewUrl, cover: track.cover };
   }
 
-  // 2) Fallback do YouTube (wymaga YT_API_KEY)
+  // 2) Fallback to YouTube (requires YT_API_KEY)
   if (process.env.YT_API_KEY && track.title) {
     const q = [track.title, track.artist].filter(Boolean).join(" ");
     try {
@@ -68,7 +68,7 @@ async function buildPlaybackForTrack(track, mode) {
     }
   }
 
-  // 3) Nic nie znaleziono
+  // 3) Nothing found
   return null;
 }
 
@@ -255,7 +255,6 @@ io.on("connection", (socket) => {
     const newName = (name || "").trim().slice(0, 32);
     if (!newName) return cb && cb({ error: "Name required." });
 
-    // Unikalność (prosta) — dopisz sufiks, jeśli zajęte
     const taken = [...room.users.values()].some(
       (u) => u !== user && u.name === newName
     );
@@ -298,12 +297,10 @@ io.on("connection", (socket) => {
     if (!room.tracks || !room.tracks.length)
       return cb && cb({ error: "No tracks available." });
 
-    // Nie filtrujemy po preview — dajemy szansę fallbackowi do YT
     const pool = room.tracks.slice();
     let track = null,
       playback = null;
 
-    // Kilka prób wylosowania czegoś, co da się odtworzyć
     for (let i = 0; i < Math.min(20, pool.length); i++) {
       const candidate = pool[Math.floor(Math.random() * pool.length)];
       const pb = await buildPlaybackForTrack(candidate, room.mode);
@@ -398,7 +395,6 @@ io.on("connection", (socket) => {
     r.buzzer = { winnerId: socket.id, winnerName: player.name, ts: Date.now() };
     io.to(code).emit("buzzed", { name: player.name, at: r.buzzer.ts });
 
-    // NEW: zatrzymaj odtwarzanie u wszystkich
     io.to(code).emit("pausePlayback");
 
     cb && cb({ ok: true });
@@ -436,7 +432,7 @@ io.on("connection", (socket) => {
     if (!entry) return cb && cb({ error: "Player not found." });
 
     entry[1].score -= Number(points) || 0;
-    if (entry[1].score < 0) entry[1].score = 0; // nie schodzimy poniżej zera
+    if (entry[1].score < 0) entry[1].score = 0;
 
     broadcastRoom(code);
     cb && cb({ ok: true });

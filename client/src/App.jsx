@@ -116,7 +116,7 @@ export default function App() {
     if (player?.stopVideo) player.stopVideo();
   });
 
-  // pauza dla wszystkich po pierwszym „buzz”
+  // pause everyones player after first „buzz”
   useSocketEvent("pausePlayback", () => {
     if (audioRef.current) audioRef.current.pause();
     const player = ytRef.current?.internalPlayer || ytRef.current;
@@ -126,7 +126,6 @@ export default function App() {
   useSocketEvent("chat", (msg) => setChatLog((prev) => [...prev, msg]));
   useSocketEvent("buzzed", (payload) => setFirstBuzz(payload));
 
-  // awardPlayer -> automatycznie wybierz firstBuzz lub pierwszego gracza
   useEffect(() => {
     const players = roomState?.players || [];
     if (!players.length) {
