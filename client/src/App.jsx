@@ -59,6 +59,7 @@ export default function App() {
   // ===== Game mode =====
   const [gameType, setGameType] = useState("text"); // "text" | "buzzer"
   const [firstBuzz, setFirstBuzz] = useState(null);
+  const [buzzQueue, setBuzzQueue] = useState([]);
 
   // ===== Award panel (host) =====
   const [awardPlayer, setAwardPlayer] = useState("");
@@ -99,6 +100,7 @@ export default function App() {
     setRound(payload);
     setGuess("");
     setFirstBuzz(null);
+    setBuzzQueue([]);
     if (payload.playback?.type === "audio" && audioRef.current) {
       setTimeout(() => {
         audioRef.current.currentTime = 0;
@@ -111,6 +113,7 @@ export default function App() {
   useSocketEvent("roundEnd", (payload) => {
     setLastResult(payload);
     setFirstBuzz(null);
+    setBuzzQueue([]);
     if (audioRef.current) audioRef.current.pause();
     const player = ytRef.current?.internalPlayer || ytRef.current;
     if (player?.stopVideo) player.stopVideo();
@@ -125,6 +128,9 @@ export default function App() {
 
   useSocketEvent("chat", (msg) => setChatLog((prev) => [...prev, msg]));
   useSocketEvent("buzzed", (payload) => setFirstBuzz(payload));
+  useSocketEvent("queueUpdated", (payload) => setBuzzQueue(payload.queue || []));
+  useSocketEvent("buzzCleared", () => { setFirstBuzz(null);
+    setBuzzQueue([]); setBuzzQueue([]); });
 
   useEffect(() => {
     const players = roomState?.players || [];
@@ -149,6 +155,7 @@ export default function App() {
     setRound(null);
     setLastResult(null);
     setFirstBuzz(null);
+    setBuzzQueue([]);
     if (audioRef.current) audioRef.current.pause();
     const player = ytRef.current?.internalPlayer || ytRef.current;
     if (player?.stopVideo) player.stopVideo();
@@ -245,7 +252,13 @@ export default function App() {
     });
   }
 
-  function awardPoints(playerName) {
+  
+  function passBuzzer() {
+    socket.emit("passBuzzer", { code: roomCode }, (resp) => {
+      if (resp?.error) alert(resp.error);
+    });
+  }
+function awardPoints(playerName) {
     socket.emit(
       "awardPoints",
       { code: roomCode, playerName, points: 10 },
@@ -539,6 +552,14 @@ export default function App() {
                     ) : (
                       <span className="kbd">{dict.noBuzzYet}</span>
                     )}
+                  
+                  {buzzQueue.length > 0 && (
+                    <div className="kbd" style={{ marginTop: 8 }}>
+                      {dict.queue}:{' '}
+                      {buzzQueue.join(", ")}
+                    </div>
+                  )}
+
                   </div>
                   <div className="row">
                     <button className="btn" onClick={buzz}>
@@ -558,11 +579,8 @@ export default function App() {
                         onClick={() => awardPoints(awardPlayer)}>
                         +10
                       </button>
-                      <button
-                        className="btn"
-                        onClick={() => deductPoints(awardPlayer)}>
-                        -10
-                      </button>
+                      <button className="btn" onClick={() => deductPoints(awardPlayer)}>-10</button>
+                      <button className="btn" onClick={passBuzzer}>{dict.passToNext}</button>
                       <button className="btn ghost" onClick={endRoundManual}>
                         {dict.endRound}
                       </button>

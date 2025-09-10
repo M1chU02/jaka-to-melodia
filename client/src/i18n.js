@@ -50,6 +50,8 @@ export const dictionaries = {
     noBuzzYet: "Jeszcze nikt się nie zgłosił",
     awardPoints: "Przyznaj punkty",
     endRound: "Zakończ rundę",
+    passToNext: "Dalej",
+    queue: "Kolejka" ,
     choosePlayer: "Wybierz gracza",
   },
 
@@ -104,6 +106,8 @@ export const dictionaries = {
     noBuzzYet: "No buzz yet",
     awardPoints: "Award points",
     endRound: "End round",
+    passToNext: "Pass to next",
+    queue: "Queue",
     choosePlayer: "Choose player",
   },
 };
