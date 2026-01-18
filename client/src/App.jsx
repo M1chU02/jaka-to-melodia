@@ -128,9 +128,14 @@ export default function App() {
 
   useSocketEvent("chat", (msg) => setChatLog((prev) => [...prev, msg]));
   useSocketEvent("buzzed", (payload) => setFirstBuzz(payload));
-  useSocketEvent("queueUpdated", (payload) => setBuzzQueue(payload.queue || []));
-  useSocketEvent("buzzCleared", () => { setFirstBuzz(null);
-    setBuzzQueue([]); setBuzzQueue([]); });
+  useSocketEvent("queueUpdated", (payload) =>
+    setBuzzQueue(payload.queue || []),
+  );
+  useSocketEvent("buzzCleared", () => {
+    setFirstBuzz(null);
+    setBuzzQueue([]);
+    setBuzzQueue([]);
+  });
 
   useEffect(() => {
     const players = roomState?.players || [];
@@ -166,6 +171,7 @@ export default function App() {
       setRoomCode(code);
       setIsHost(true);
       setStage("lobby");
+      setChatLog([]);
       const finalName = name?.trim() || "Host";
       setName(finalName);
       socket.emit("joinRoom", { code, name: finalName }, () => {});
@@ -183,7 +189,7 @@ export default function App() {
         setRoomCode(roomCode.toUpperCase());
         setIsHost(resp.hostId === socket.id);
         setStage("lobby");
-      }
+      },
     );
   }
 
@@ -217,7 +223,7 @@ export default function App() {
       },
       (resp) => {
         if (resp?.error) return alert(resp.error);
-      }
+      },
     );
   }
 
@@ -252,19 +258,18 @@ export default function App() {
     });
   }
 
-  
   function passBuzzer() {
     socket.emit("passBuzzer", { code: roomCode }, (resp) => {
       if (resp?.error) alert(resp.error);
     });
   }
-function awardPoints(playerName) {
+  function awardPoints(playerName) {
     socket.emit(
       "awardPoints",
       { code: roomCode, playerName, points: 10 },
       (resp) => {
         if (resp?.error) alert(resp.error);
-      }
+      },
     );
   }
 
@@ -274,7 +279,7 @@ function awardPoints(playerName) {
       { code: roomCode, playerName, points: 10 },
       (resp) => {
         if (resp?.error) alert(resp.error);
-      }
+      },
     );
   }
 
@@ -456,9 +461,6 @@ function awardPoints(playerName) {
                 <button className="btn" onClick={startGame}>
                   {dict.startGame}
                 </button>
-                <button className="btn ghost" onClick={nextRound}>
-                  {dict.nextRound}
-                </button>
               </div>
             ) : (
               <p className="kbd">{dict.note}</p>
@@ -552,14 +554,12 @@ function awardPoints(playerName) {
                     ) : (
                       <span className="kbd">{dict.noBuzzYet}</span>
                     )}
-                  
-                  {buzzQueue.length > 0 && (
-                    <div className="kbd" style={{ marginTop: 8 }}>
-                      {dict.queue}:{' '}
-                      {buzzQueue.join(", ")}
-                    </div>
-                  )}
 
+                    {buzzQueue.length > 0 && (
+                      <div className="kbd" style={{ marginTop: 8 }}>
+                        {dict.queue}: {buzzQueue.join(", ")}
+                      </div>
+                    )}
                   </div>
                   <div className="row">
                     <button className="btn" onClick={buzz}>
@@ -579,8 +579,14 @@ function awardPoints(playerName) {
                         onClick={() => awardPoints(awardPlayer)}>
                         +10
                       </button>
-                      <button className="btn" onClick={() => deductPoints(awardPlayer)}>-10</button>
-                      <button className="btn" onClick={passBuzzer}>{dict.passToNext}</button>
+                      <button
+                        className="btn"
+                        onClick={() => deductPoints(awardPlayer)}>
+                        -10
+                      </button>
+                      <button className="btn" onClick={passBuzzer}>
+                        {dict.passToNext}
+                      </button>
                       <button className="btn ghost" onClick={endRoundManual}>
                         {dict.endRound}
                       </button>
@@ -595,14 +601,14 @@ function awardPoints(playerName) {
                     {lastResult.winner
                       ? dict.winner(
                           lastResult.winner,
-                          Math.round(lastResult.elapsedMs / 100) / 10
+                          Math.round(lastResult.elapsedMs / 100) / 10,
                         )
                       : ""}
                   </b>
                   <br />
                   {dict.itWas(
                     lastResult.answer.title,
-                    lastResult.answer.artist
+                    lastResult.answer.artist,
                   )}
                 </div>
               )}
