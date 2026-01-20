@@ -19,7 +19,7 @@ app.use(express.json({ limit: "2mb" }));
 app.use(
   cors({
     origin: process.env.CLIENT_ORIGIN?.split(",") || "*",
-  })
+  }),
 );
 
 const server = http.createServer(app);
@@ -59,7 +59,7 @@ async function buildPlaybackForTrack(track, mode) {
             videoEmbeddable: "true",
             part: "snippet",
           },
-        }
+        },
       );
       const item = r.data.items?.[0];
       if (item?.id?.videoId) {
@@ -280,7 +280,7 @@ io.on("connection", (socket) => {
     if (!newName) return cb && cb({ error: "Name required." });
 
     const taken = [...room.users.values()].some(
-      (u) => u !== user && u.name === newName
+      (u) => u !== user && u.name === newName,
     );
     user.name = taken
       ? `${newName}#${Math.floor(Math.random() * 99) + 1}`
@@ -492,7 +492,7 @@ io.on("connection", (socket) => {
       return cb && cb({ error: "Not in buzzer mode." });
 
     const entry = [...room.users.entries()].find(
-      ([, u]) => u.name === playerName
+      ([, u]) => u.name === playerName,
     );
     if (!entry) return cb && cb({ error: "Player not found." });
     entry[1].score += Number(points) || 0;
@@ -510,7 +510,7 @@ io.on("connection", (socket) => {
       return cb && cb({ error: "Not in buzzer mode." });
 
     const entry = [...room.users.entries()].find(
-      ([, u]) => u.name === playerName
+      ([, u]) => u.name === playerName,
     );
     if (!entry) return cb && cb({ error: "Player not found." });
 
@@ -553,6 +553,51 @@ io.on("connection", (socket) => {
     });
     broadcastRoom(code);
     cb && cb({ ok: true });
+  });
+
+  // Host verifies answer typed manually (artist & title)
+  socket.on("hostVerifyGuess", ({ code, artist, title }, cb) => {
+    const room = getRoom(code);
+    if (!room || !room.currentRound)
+      return cb && cb({ error: "Round is not active." });
+    if (room.hostId !== socket.id)
+      return cb && cb({ error: "Only the host can verify." });
+    if (room.gameType !== "buzzer")
+      return cb && cb({ error: "Not in buzzer mode." });
+
+    const correctTitle = room.currentRound.answer.title;
+    const correctArtist = room.currentRound.answer.artist;
+
+    const guessText = `${artist} ${title}`.trim();
+    const correct = isGuessCorrect(guessText, correctTitle, correctArtist);
+
+    if (correct) {
+      cb && cb({ ok: true, correct: true });
+    } else {
+      // Wrong answer: resume and pass buzzer
+      const r = room.currentRound;
+      if (r.buzzer) {
+        if (r.buzzer.queue.length > 0) {
+          const next = r.buzzer.queue.shift();
+          r.buzzer.currentId = next.id;
+          r.buzzer.currentName = next.name;
+
+          io.to(code).emit("buzzed", {
+            id: r.buzzer.currentId,
+            name: r.buzzer.currentName,
+            at: r.buzzer.tsFirst,
+          });
+          io.to(code).emit("queueUpdated", { queue: r.buzzer.queue });
+          io.to(code).emit("resumePlayback");
+        } else {
+          r.buzzer = null;
+          io.to(code).emit("buzzCleared", {});
+          io.to(code).emit("resumePlayback");
+        }
+      }
+      broadcastRoom(code);
+      cb && cb({ ok: true, correct: false });
+    }
   });
 });
 

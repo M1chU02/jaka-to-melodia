@@ -63,6 +63,9 @@ export default function App() {
 
   // ===== Award panel (host) =====
   const [awardPlayer, setAwardPlayer] = useState("");
+  const [hostArtist, setHostArtist] = useState("");
+  const [hostTitle, setHostTitle] = useState("");
+  const [verifyStatus, setVerifyStatus] = useState(null); // null, 'correct', 'wrong'
 
   // ===== Players (media refs) =====
   const audioRef = useRef(null);
@@ -101,6 +104,9 @@ export default function App() {
     setGuess("");
     setFirstBuzz(null);
     setBuzzQueue([]);
+    setHostArtist("");
+    setHostTitle("");
+    setVerifyStatus(null);
     if (payload.playback?.type === "audio" && audioRef.current) {
       setTimeout(() => {
         audioRef.current.currentTime = 0;
@@ -124,6 +130,12 @@ export default function App() {
     if (audioRef.current) audioRef.current.pause();
     const player = ytRef.current?.internalPlayer || ytRef.current;
     if (player?.pauseVideo) player.pauseVideo();
+  });
+
+  useSocketEvent("resumePlayback", () => {
+    if (audioRef.current) audioRef.current.play().catch(() => {});
+    const player = ytRef.current?.internalPlayer || ytRef.current;
+    if (player?.playVideo) player.playVideo();
   });
 
   useSocketEvent("chat", (msg) => setChatLog((prev) => [...prev, msg]));
@@ -287,6 +299,25 @@ export default function App() {
     socket.emit("endRoundManual", { code: roomCode }, (resp) => {
       if (resp?.error) alert(resp.error);
     });
+  }
+
+  function verifyHostGuess(e) {
+    if (e) e.preventDefault();
+    socket.emit(
+      "hostVerifyGuess",
+      { code: roomCode, artist: hostArtist, title: hostTitle },
+      (resp) => {
+        if (resp?.error) return alert(resp.error);
+        if (resp.correct) {
+          setVerifyStatus("correct");
+        } else {
+          setVerifyStatus("wrong");
+          setHostArtist("");
+          setHostTitle("");
+          setTimeout(() => setVerifyStatus(null), 2000);
+        }
+      },
+    );
   }
 
   function applyNewName() {
@@ -591,6 +622,46 @@ export default function App() {
                         {dict.endRound}
                       </button>
                     </div>
+                  )}
+
+                  {isHost && (
+                    <form
+                      onSubmit={verifyHostGuess}
+                      className="card"
+                      style={{ marginTop: 12 }}>
+                      <h4 style={{ margin: "0 0 8px 0" }}>
+                        Weryfikacja odpowiedzi (Host)
+                      </h4>
+                      <div className="row">
+                        <input
+                          className="input"
+                          placeholder="Wykonawca"
+                          value={hostArtist}
+                          onChange={(e) => setHostArtist(e.target.value)}
+                          style={{ flex: 1 }}
+                        />
+                        <input
+                          className="input"
+                          placeholder="Tytuł"
+                          value={hostTitle}
+                          onChange={(e) => setHostTitle(e.target.value)}
+                          style={{ flex: 1 }}
+                        />
+                        <button className="btn" type="submit">
+                          Sprawdź
+                        </button>
+                      </div>
+                      {verifyStatus === "correct" && (
+                        <p style={{ color: "#48bb78", margin: "8px 0 0 0" }}>
+                          ✅ Poprawna odpowiedź! Możesz przyznać punkty.
+                        </p>
+                      )}
+                      {verifyStatus === "wrong" && (
+                        <p style={{ color: "#f56565", margin: "8px 0 0 0" }}>
+                          ❌ Błędna odpowiedź. Wznowiono granie.
+                        </p>
+                      )}
+                    </form>
                   )}
                 </div>
               )}
