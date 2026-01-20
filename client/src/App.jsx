@@ -65,7 +65,7 @@ export default function App() {
   const [awardPlayer, setAwardPlayer] = useState("");
   const [hostArtist, setHostArtist] = useState("");
   const [hostTitle, setHostTitle] = useState("");
-  const [verifyStatus, setVerifyStatus] = useState(null); // null, 'correct', 'wrong'
+  const [verifyStatus, setVerifyStatus] = useState(null); // { artist: bool, title: bool }
 
   // ===== Players (media refs) =====
   const audioRef = useRef(null);
@@ -308,13 +308,15 @@ export default function App() {
       { code: roomCode, artist: hostArtist, title: hostTitle },
       (resp) => {
         if (resp?.error) return alert(resp.error);
-        if (resp.correct) {
-          setVerifyStatus("correct");
-        } else {
-          setVerifyStatus("wrong");
+        setVerifyStatus({
+          artist: resp.artistCorrect,
+          title: resp.titleCorrect,
+        });
+
+        if (!resp.artistCorrect && !resp.titleCorrect) {
           setHostArtist("");
           setHostTitle("");
-          setTimeout(() => setVerifyStatus(null), 2000);
+          setTimeout(() => setVerifyStatus(null), 3000);
         }
       },
     );
@@ -651,15 +653,38 @@ export default function App() {
                           Sprawdź
                         </button>
                       </div>
-                      {verifyStatus === "correct" && (
-                        <p style={{ color: "#48bb78", margin: "8px 0 0 0" }}>
-                          ✅ Poprawna odpowiedź! Możesz przyznać punkty.
-                        </p>
-                      )}
-                      {verifyStatus === "wrong" && (
-                        <p style={{ color: "#f56565", margin: "8px 0 0 0" }}>
-                          ❌ Błędna odpowiedź. Wznowiono granie.
-                        </p>
+                      {verifyStatus && (
+                        <div style={{ marginTop: 8 }}>
+                          <span
+                            style={{
+                              color: verifyStatus.artist
+                                ? "#48bb78"
+                                : "#f56565",
+                              marginRight: 12,
+                            }}>
+                            {verifyStatus.artist
+                              ? "✅ Wykonawca OK"
+                              : "❌ Wykonawca BŁĄD"}
+                          </span>
+                          <span
+                            style={{
+                              color: verifyStatus.title ? "#48bb78" : "#f56565",
+                            }}>
+                            {verifyStatus.title
+                              ? "✅ Tytuł OK"
+                              : "❌ Tytuł BŁĄD"}
+                          </span>
+                          {verifyStatus.artist && verifyStatus.title && (
+                            <p
+                              style={{
+                                color: "#48bb78",
+                                margin: "4px 0 0 0",
+                                fontWeight: "bold",
+                              }}>
+                              Wszystko poprawne! Przyznaj punkty.
+                            </p>
+                          )}
+                        </div>
                       )}
                     </form>
                   )}

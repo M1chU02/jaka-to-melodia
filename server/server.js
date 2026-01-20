@@ -10,7 +10,7 @@ import {
   parseSpotifyPlaylistId,
 } from "./spotify.js";
 import { fetchYouTubePlaylist, parseYouTubePlaylistId } from "./youtube.js";
-import { isGuessCorrect } from "./utils.js";
+import { isGuessCorrect, getDetailedMatch } from "./utils.js";
 
 dotenv.config();
 
@@ -568,13 +568,21 @@ io.on("connection", (socket) => {
     const correctTitle = room.currentRound.answer.title;
     const correctArtist = room.currentRound.answer.artist;
 
-    const guessText = `${artist} ${title}`.trim();
-    const correct = isGuessCorrect(guessText, correctTitle, correctArtist);
+    const { artistCorrect, titleCorrect } = getDetailedMatch(
+      artist,
+      title,
+      correctArtist,
+      correctTitle,
+    );
 
-    if (correct) {
-      cb && cb({ ok: true, correct: true });
+    if (artistCorrect && titleCorrect) {
+      cb && cb({ ok: true, artistCorrect, titleCorrect });
+    } else if (artistCorrect || titleCorrect) {
+      // Partially correct - maybe host wants to give a hint or something, but we don't auto-resume yet?
+      // Actually, let's just return the status. The host can decide what to do.
+      cb && cb({ ok: true, artistCorrect, titleCorrect });
     } else {
-      // Wrong answer: resume and pass buzzer
+      // Wrong answer (both wrong) -> resume and pass buzzer
       const r = room.currentRound;
       if (r.buzzer) {
         if (r.buzzer.queue.length > 0) {
@@ -596,7 +604,7 @@ io.on("connection", (socket) => {
         }
       }
       broadcastRoom(code);
-      cb && cb({ ok: true, correct: false });
+      cb && cb({ ok: true, artistCorrect: false, titleCorrect: false });
     }
   });
 });
