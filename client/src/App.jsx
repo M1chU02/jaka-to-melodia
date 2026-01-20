@@ -168,6 +168,7 @@ export default function App() {
   function goHome() {
     setStage("welcome");
     setRoomCode("");
+    setChatLog([]);
     setParsed(null);
     setRound(null);
     setLastResult(null);
@@ -198,6 +199,7 @@ export default function App() {
       { code: roomCode.toUpperCase(), name: finalName },
       (resp) => {
         if (resp?.error) return alert(resp.error);
+        setChatLog([]);
         setRoomCode(roomCode.toUpperCase());
         setIsHost(resp.hostId === socket.id);
         setStage("lobby");
@@ -372,12 +374,14 @@ export default function App() {
               placeholder={dict.yourName}
               value={name}
               onChange={(e) => setName(e.target.value)}
+              autoComplete="off"
             />
             <input
               className="input"
               placeholder={dict.roomCodePlaceholder}
               value={roomCode}
               onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+              autoComplete="off"
             />
             <button className="btn" onClick={joinRoom}>
               {dict.join}
@@ -412,6 +416,7 @@ export default function App() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder={dict.yourName}
+                  autoComplete="off"
                 />
                 <button className="btn ghost" onClick={applyNewName}>
                   {dict.change}
@@ -574,6 +579,7 @@ export default function App() {
                     onChange={(e) => setGuess(e.target.value)}
                     placeholder={dict.yourAnswer}
                     style={{ flex: 1 }}
+                    autoComplete="off"
                   />
                   <button className="btn" type="submit">
                     {dict.guess}
@@ -641,6 +647,7 @@ export default function App() {
                           value={hostArtist}
                           onChange={(e) => setHostArtist(e.target.value)}
                           style={{ flex: 1 }}
+                          autoComplete="off"
                         />
                         <input
                           className="input"
@@ -648,6 +655,7 @@ export default function App() {
                           value={hostTitle}
                           onChange={(e) => setHostTitle(e.target.value)}
                           style={{ flex: 1 }}
+                          autoComplete="off"
                         />
                         <button className="btn" type="submit">
                           {dict.check}
