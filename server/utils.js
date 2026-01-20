@@ -4,23 +4,26 @@ export function normalize(str) {
   if (!str) return "";
 
   let s = str
-    // Remove content inside parens/brackets first
+    // 1. Remove content inside parens/brackets first (e.g. "(prod. Rumak)")
     .replace(/\(.*?\)|\[.*?\]|\{.*?\}/g, " ")
-    // Remove typical "junk" phrases
+    // 2. Remove typical "junk" phrases
     .replace(/official\s*video|lyrics?|audio|remaster(ed)?|hd|hq|mv/gi, " ")
     .replace(/feat\.?|ft\.?|prod\.?|produced\s*by/gi, " ")
-    // Convert to lowercase
+    // 3. Convert to lowercase
     .toLowerCase();
 
-  // Keep only letters (unicode), numbers and spaces, convert everything else to space
+  // 4. Keep only letters (unicode), numbers and spaces, convert everything else (punctuation) to space
   s = s.replace(/[^\p{L}\p{N}\s]/gu, " ");
 
-  // Collapse whitespace
+  // 5. Collapse whitespace
   s = s.replace(/\s+/g, " ").trim();
 
   return s;
 }
 
+/**
+ * Main function for automated guessing (text mode)
+ */
 export function isGuessCorrect(guess, title, artist) {
   const g = normalize(guess);
   const t = normalize(title);
@@ -28,11 +31,11 @@ export function isGuessCorrect(guess, title, artist) {
 
   if (!g) return false;
 
-  // Simple includes checks
+  // Check if guess matches either normalized full title or artist
   if (t && (g.includes(t) || t.includes(g))) return true;
   if (a && (g.includes(a) || a.includes(g))) return true;
 
-  // Let's also check if guess contains major tokens of title or artist
+  // Token based check
   const gTokens = new Set(g.split(" ").filter((x) => x.length > 2));
   const tTokens = new Set(t.split(" ").filter((x) => x.length > 2));
   const aTokens = new Set(a.split(" ").filter((x) => x.length > 2));
@@ -46,7 +49,6 @@ export function isGuessCorrect(guess, title, artist) {
   if (hasHighOverlap(gTokens, tTokens)) return true;
   if (hasHighOverlap(gTokens, aTokens)) return true;
 
-  // Fuzzy fallback
   const fuzzy = Math.max(
     t ? stringSimilarity.compareTwoStrings(g, t) : 0,
     a ? stringSimilarity.compareTwoStrings(g, a) : 0,
@@ -55,6 +57,9 @@ export function isGuessCorrect(guess, title, artist) {
   return fuzzy >= 0.65;
 }
 
+/**
+ * Detailed verification used by the Host in Buzzer Mode
+ */
 export function getDetailedMatch(
   guessArtist,
   guessTitle,
@@ -63,55 +68,59 @@ export function getDetailedMatch(
 ) {
   const normGA = normalize(guessArtist);
   const normGT = normalize(guessTitle);
-  let normA = normalize(targetArtist || "");
-  let normT = normalize(targetTitle || "");
+  const normA = normalize(targetArtist || "");
+  const normT = normalize(targetTitle || "");
 
-  // Special logic for YouTube where Title often includes Artist: "Artist - Title"
-  // If TargetTitle already contains TargetArtist, try to strip it for a cleaner comparison
-  if (normT.startsWith(normA)) {
-    let stripped = normT.slice(normA.length).trim();
-    // If we have something left, it's likely the "real" title
-    if (stripped.length > 2) {
-      // We'll keep it as a backup or use it directly
-    }
+  // Special logic: if the target title contains the artist's name (common on YouTube)
+  // create a "clean" version of the title by removing the artist's name.
+  // Example: targetTitle="Taco Hemingway - Deszcz na betonie", targetArtist="Taco Hemingway"
+  // -> cleanT="Deszcz na betonie"
+  let cleanT = normT;
+  if (normA && normT.includes(normA)) {
+    // Replace artist name only if it's a separate "word" or separated by junk
+    // We'll just try stripping it globally and trimming
+    cleanT = normT.replace(normA, "").trim();
   }
 
-  function check(guess, target, otherTarget) {
+  function check(guess, primaryTarget, secondaryTarget, backupTarget) {
     if (!guess) return false;
-    if (!target) return false;
 
-    // Direct matches / substring
-    if (guess === target) return true;
-    if (guess.includes(target) || target.includes(guess)) return true;
+    // Normalize targets again just in case (though they should be already)
+    const t1 = normalize(primaryTarget);
+    const t2 = normalize(secondaryTarget);
+    const t3 = normalize(backupTarget);
 
-    // Token overlap
-    const gTokens = new Set(guess.split(" ").filter((x) => x.length > 2));
-    const tTokens = new Set(target.split(" ").filter((x) => x.length > 2));
+    function isMatch(g, target) {
+      if (!target) return false;
+      if (g === target) return true;
+      if (g.includes(target) || target.includes(g)) return true;
 
-    if (gTokens.size > 0 && tTokens.size > 0) {
-      const overlap = [...gTokens].filter((x) => tTokens.has(x)).length;
-      if (overlap / gTokens.size >= 0.7 || overlap / tTokens.size >= 0.7)
-        return true;
+      // Token match
+      const gTokens = g.split(" ").filter((x) => x.length > 2);
+      const tTokens = target.split(" ").filter((x) => x.length > 2);
+      if (gTokens.length > 0 && tTokens.length > 0) {
+        const overlap = gTokens.filter((val) => tTokens.includes(val)).length;
+        if (overlap / gTokens.length >= 0.7 || overlap / tTokens.length >= 0.7)
+          return true;
+      }
+
+      // Fuzzy
+      if (stringSimilarity.compareTwoStrings(g, target) >= 0.7) return true;
+      return false;
     }
 
-    // Fuzzy fallback
-    const fuzzy = stringSimilarity.compareTwoStrings(guess, target);
-    if (fuzzy >= 0.7) return true;
-
-    // Cross-check: If they accidentally put the artist in the title field or vice versa
-    if (otherTarget) {
-      const fuzzyOther = stringSimilarity.compareTwoStrings(
-        guess,
-        normalize(otherTarget),
-      );
-      if (fuzzyOther >= 0.8) return true;
-    }
+    if (isMatch(guess, t1)) return true;
+    if (isMatch(guess, t2)) return true;
+    if (isMatch(guess, t3)) return true;
 
     return false;
   }
 
-  const artistCorrect = check(normGA, normA, targetTitle);
-  const titleCorrect = check(normGT, normT, targetArtist);
+  // Verify Artist: Check against Target Artist and Target Title (in case they swapped or it's mixed)
+  const artistCorrect = check(normGA, normA, normT, targetTitle);
+
+  // Verify Title: Check against normalized Title, "Cleaned" Title, and Target Artist (swap check)
+  const titleCorrect = check(normGT, normT, cleanT, targetArtist);
 
   return { artistCorrect, titleCorrect };
 }
