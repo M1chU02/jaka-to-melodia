@@ -478,6 +478,7 @@ io.on("connection", (socket) => {
     } else {
       r.buzzer = null;
       io.to(code).emit("buzzCleared", {});
+      io.to(code).emit("resumePlayback");
       return cb && cb({ ok: true, cleared: true });
     }
   });
