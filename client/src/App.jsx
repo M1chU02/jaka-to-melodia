@@ -414,7 +414,7 @@ export default function App() {
                   placeholder={dict.yourName}
                 />
                 <button className="btn ghost" onClick={applyNewName}>
-                  Zmień
+                  {dict.change}
                 </button>
               </div>
             </div>
@@ -632,25 +632,25 @@ export default function App() {
                       className="card"
                       style={{ marginTop: 12 }}>
                       <h4 style={{ margin: "0 0 8px 0" }}>
-                        Weryfikacja odpowiedzi (Host)
+                        {dict.verifyTitle}
                       </h4>
                       <div className="row">
                         <input
                           className="input"
-                          placeholder="Wykonawca"
+                          placeholder={dict.artistLabel}
                           value={hostArtist}
                           onChange={(e) => setHostArtist(e.target.value)}
                           style={{ flex: 1 }}
                         />
                         <input
                           className="input"
-                          placeholder="Tytuł"
+                          placeholder={dict.titleLabel}
                           value={hostTitle}
                           onChange={(e) => setHostTitle(e.target.value)}
                           style={{ flex: 1 }}
                         />
                         <button className="btn" type="submit">
-                          Sprawdź
+                          {dict.check}
                         </button>
                       </div>
                       {verifyStatus && (
@@ -663,16 +663,16 @@ export default function App() {
                               marginRight: 12,
                             }}>
                             {verifyStatus.artist
-                              ? "✅ Wykonawca OK"
-                              : "❌ Wykonawca BŁĄD"}
+                              ? dict.artistOk
+                              : dict.artistError}
                           </span>
                           <span
                             style={{
                               color: verifyStatus.title ? "#48bb78" : "#f56565",
                             }}>
                             {verifyStatus.title
-                              ? "✅ Tytuł OK"
-                              : "❌ Tytuł BŁĄD"}
+                              ? dict.titleOk
+                              : dict.titleError}
                           </span>
                           {verifyStatus.artist && verifyStatus.title && (
                             <p
@@ -681,7 +681,7 @@ export default function App() {
                                 margin: "4px 0 0 0",
                                 fontWeight: "bold",
                               }}>
-                              Wszystko poprawne! Przyznaj punkty.
+                              {dict.allCorrect}
                             </p>
                           )}
                         </div>
