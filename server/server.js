@@ -103,20 +103,37 @@ async function buildPlaybackForTrack(track, mode) {
       return { type: "youtube", videoId: track.videoId };
     }
 
-    // 2. Fallback: Search on YouTube on-the-fly if videoId is missing
+    // 2. Fallback: Spotify preview (Free, saves YT quota)
+    if (track.previewUrl) {
+      return {
+        type: "audio",
+        previewUrl: track.previewUrl,
+        cover: track.cover,
+      };
+    }
+
+    // 3. Last Layer: Search on YouTube on-the-fly (Expensive)
     const videoId = await getYouTubeVideoId(track.title, track.artist);
     if (videoId) {
       return { type: "youtube", videoId };
     }
 
     console.log(
-      `YouTube lookup failed for Spotify track: ${track.title}. Skipping.`,
+      `Playback failed for Spotify track: ${track.title}. No videoId or previewUrl found.`,
     );
     return null;
   }
 
   // YouTube Mode
-  if (mode === "youtube" && track.title) {
+  if (mode === "youtube") {
+    // 1. If we already have a videoId (standard for YT tracks), use it!
+    // Don't waste 100 quota units searching for something we have.
+    if (track.id && track.source === "youtube") {
+      return { type: "youtube", videoId: track.id };
+    }
+
+    if (!track.title) return null;
+
     if (!process.env.YT_API_KEY) {
       console.warn("YouTube API Key is missing.");
       return null;
@@ -129,6 +146,7 @@ async function buildPlaybackForTrack(track, mode) {
       return null;
     }
 
+    // 2. Fallback search (only if ID is missing)
     const q = [track.title, track.artist].filter(Boolean).join(" ");
     try {
       const r = await axios.get(

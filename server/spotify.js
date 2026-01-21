@@ -64,6 +64,7 @@ export async function fetchSpotifyPlaylistTracks({
       id: t.id,
       title: t.name,
       artist: (t.artists && t.artists.map((a) => a.name).join(", ")) || "",
+      previewUrl: t.preview_url || null,
       cover:
         (t.album &&
           t.album.images &&
@@ -77,6 +78,7 @@ export async function fetchSpotifyPlaylistTracks({
     source: "spotify",
     playlistId: id,
     total: tracks.length,
+    playable: tracks.filter((t) => !!t.previewUrl).length,
     tracks,
   };
 }
