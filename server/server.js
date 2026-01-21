@@ -300,29 +300,28 @@ app.post("/api/parse-playlist", async (req, res) => {
       });
 
       // --- AUTOMATIC YT WORKAROUND (youtube-sr) ---
-      // We pick 20 random tracks
       const allTracks = data.tracks || [];
       const shuffled = [...allTracks].sort(() => Math.random() - 0.5);
-      const chosen = shuffled.slice(0, 20);
 
       console.log(
-        `Enriching 20 Spotify tracks with YouTube video IDs using youtube-sr for playlist: ${data.playlistId}`,
+        `Searching for up to 20 playable tracks for playlist: ${data.playlistId}`,
       );
 
-      // Perform searches in parallel
-      const enrichedTracks = await Promise.all(
-        chosen.map(async (t) => {
-          const videoId = await getYouTubeVideoId(t.title, t.artist);
-          return { ...t, videoId };
-        }),
-      );
+      const enrichedTracks = [];
+      for (const t of shuffled) {
+        if (enrichedTracks.length >= 20) break;
+
+        const videoId = await getYouTubeVideoId(t.title, t.artist);
+        // "Playable" means we found a videoId OR it has a Spotify previewUrl
+        if (videoId || t.previewUrl) {
+          enrichedTracks.push({ ...t, videoId });
+        }
+      }
 
       return res.json({
         ...data,
         total: enrichedTracks.length,
-        // playable = has videoId OR has previewUrl
-        playable: enrichedTracks.filter((t) => t.videoId || t.previewUrl)
-          .length,
+        playable: enrichedTracks.length,
         tracks: enrichedTracks,
       });
     }
