@@ -299,24 +299,30 @@ app.post("/api/parse-playlist", async (req, res) => {
         clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
       });
 
-      // --- AUTOMATIC YT WORKAROUND (youtube-sr) ---
+      // --- AUTOMATIC YT WORKAROUND (youtube-sr) - Optimized Parallel Search ---
       const allTracks = data.tracks || [];
       const shuffled = [...allTracks].sort(() => Math.random() - 0.5);
 
+      // We take a larger batch to ensure we find 20 playable tracks
+      const batchSize = Math.min(shuffled.length, 40);
+      const batch = shuffled.slice(0, batchSize);
+
       console.log(
-        `Searching for up to 20 playable tracks for playlist: ${data.playlistId}`,
+        `Parallel searching for ${batchSize} tracks for playlist: ${data.playlistId}`,
       );
 
-      const enrichedTracks = [];
-      for (const t of shuffled) {
-        if (enrichedTracks.length >= 20) break;
+      // Perform searches in parallel for the whole batch
+      const enrichedBatch = await Promise.all(
+        batch.map(async (t) => {
+          const videoId = await getYouTubeVideoId(t.title, t.artist);
+          return { ...t, videoId };
+        }),
+      );
 
-        const videoId = await getYouTubeVideoId(t.title, t.artist);
-        // "Playable" means we found a videoId OR it has a Spotify previewUrl
-        if (videoId || t.previewUrl) {
-          enrichedTracks.push({ ...t, videoId });
-        }
-      }
+      // Filter for playable (has videoId or previewUrl) and take first 20
+      const enrichedTracks = enrichedBatch
+        .filter((t) => t.videoId || t.previewUrl)
+        .slice(0, 20);
 
       return res.json({
         ...data,
