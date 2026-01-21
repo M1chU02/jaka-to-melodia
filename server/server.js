@@ -98,7 +98,7 @@ const rooms = new Map();
 
 async function buildPlaybackForTrack(track, mode) {
   if (mode === "spotify") {
-    // 1. Use pre-fetched videoId if available
+    // 1. Use pre-fetched videoId if available (even if quota is exceeded)
     if (track.videoId) {
       return { type: "youtube", videoId: track.videoId };
     }
@@ -112,10 +112,12 @@ async function buildPlaybackForTrack(track, mode) {
       };
     }
 
-    // 3. Last Layer: Search on YouTube on-the-fly (Expensive)
-    const videoId = await getYouTubeVideoId(track.title, track.artist);
-    if (videoId) {
-      return { type: "youtube", videoId };
+    // 3. Last Layer: Search on YouTube (Only if quota available)
+    if (checkYtQuota()) {
+      const videoId = await getYouTubeVideoId(track.title, track.artist);
+      if (videoId) {
+        return { type: "youtube", videoId };
+      }
     }
 
     console.log(
@@ -127,7 +129,7 @@ async function buildPlaybackForTrack(track, mode) {
   // YouTube Mode
   if (mode === "youtube") {
     // 1. If we already have a videoId (standard for YT tracks), use it!
-    // Don't waste 100 quota units searching for something we have.
+    // Priority check before quota.
     if (track.id && track.source === "youtube") {
       return { type: "youtube", videoId: track.id };
     }
@@ -208,6 +210,20 @@ async function getYouTubeVideoId(title, artist) {
       ytQuotaExceeded = true;
       ytQuotaResetTime = Date.now() + 1000 * 60 * 60 * 12;
     }
+    return null;
+  }
+}
+
+// Helper to find YouTube ID via Odesli (Songlink) - Free & No Quota
+async function getYouTubeIdViaOdesli(spotifyId) {
+  try {
+    const url = `https://api.song.link/v1-user/links?platform=spotify&type=song&id=${spotifyId}`;
+    const r = await axios.get(url);
+    const ytId = r.data?.linksByPlatform?.youtube?.url?.match(
+      /(?:v=|\/)([a-zA-Z0-9_-]{11})/,
+    )?.[1];
+    return ytId || null;
+  } catch (e) {
     return null;
   }
 }
@@ -299,20 +315,27 @@ app.post("/api/parse-playlist", async (req, res) => {
         clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
       });
 
-      // --- AUTOMATIC YT WORKAROUND ---
-      // We pick 20 random tracks and find them on YouTube immediately
+      // --- AUTOMATIC YT WORKAROUND (Odesli + YT Search Fallback) ---
+      // We pick 20 random tracks
       const allTracks = data.tracks || [];
       const shuffled = [...allTracks].sort(() => Math.random() - 0.5);
       const chosen = shuffled.slice(0, 20);
 
       console.log(
-        `Augmenting 20 Spotify tracks with YouTube video IDs for playlist: ${data.playlistId}`,
+        `Enriching 20 Spotify tracks with YouTube video IDs using Odesli for playlist: ${data.playlistId}`,
       );
 
       // Perform searches in parallel
       const enrichedTracks = await Promise.all(
         chosen.map(async (t) => {
-          const videoId = await getYouTubeVideoId(t.title, t.artist);
+          // 1. Try Odesli (Free, fast)
+          let videoId = await getYouTubeIdViaOdesli(t.id);
+
+          // 2. Fallback to YT Search (Only if Odesli fails and quota available)
+          if (!videoId && checkYtQuota()) {
+            videoId = await getYouTubeVideoId(t.title, t.artist);
+          }
+
           return { ...t, videoId };
         }),
       );
@@ -320,7 +343,9 @@ app.post("/api/parse-playlist", async (req, res) => {
       return res.json({
         ...data,
         total: enrichedTracks.length,
-        playable: enrichedTracks.filter((t) => t.videoId).length,
+        // playable = has videoId OR has previewUrl
+        playable: enrichedTracks.filter((t) => t.videoId || t.previewUrl)
+          .length,
         tracks: enrichedTracks,
       });
     }
