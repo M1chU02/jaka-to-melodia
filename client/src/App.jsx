@@ -127,6 +127,9 @@ export default function App() {
   // ===== Sockets =====
   useSocketEvent("roomState", (payload) => {
     setRoomState(payload);
+    if (payload.hostId) {
+      setIsHost(payload.hostId === socket.id);
+    }
     if (payload.gameType) setGameType(payload.gameType);
 
     // Sync stage and round if game is ongoing

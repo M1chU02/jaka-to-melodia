@@ -12,6 +12,11 @@ import {
 import { fetchYouTubePlaylist, parseYouTubePlaylistId } from "./youtube.js";
 import { isGuessCorrect, getDetailedMatch } from "./utils.js";
 import { updateLeaderboardScore, getLeaderboard } from "./leaderboard.js";
+import {
+  saveRoom,
+  getRoomFromFirestore,
+  deleteRoomFromFirestore,
+} from "./room-manager.js";
 import admin from "firebase-admin";
 import fs from "fs";
 import path from "path";
@@ -56,6 +61,7 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 4000;
 
 // ===== In-memory game state =====
+// { [code]: { code, hostId, users: Map, ... } }
 const rooms = new Map();
 // room = {
 //   code, hostId, users: Map(socketId => {name, score}), mode: 'spotify'|'youtube',
@@ -102,21 +108,43 @@ function newRoomCode() {
   return nanoid(6).toUpperCase();
 }
 
-function getRoom(code) {
-  return rooms.get(code);
+async function getRoom(code) {
+  if (!code) return null;
+  const upper = code.toUpperCase();
+  if (rooms.has(upper)) return rooms.get(upper);
+
+  const fireRoom = await getRoomFromFirestore(upper);
+  if (fireRoom) {
+    // Reconstruct Map and Room object
+    const room = {
+      ...fireRoom,
+      users: new Map(),
+    };
+    if (fireRoom.players) {
+      for (const [uid, pData] of Object.entries(fireRoom.players)) {
+        // We don't have socket IDs for everyone yet, they will "re-attach" on join
+        // But for display, we need them in room.users
+        // Use uid as temporary key if no socket
+        room.users.set(`pending-${uid}`, { ...pData, uid });
+      }
+    }
+    rooms.set(upper, room);
+    return room;
+  }
+  return null;
 }
 
 function broadcastRoom(code) {
-  const room = getRoom(code);
+  const room = rooms.get(code.toUpperCase());
   if (!room) return;
+
   const payload = {
     code: room.code,
-    mode: room.mode || null,
+    hostId: room.hostId,
     players: [...room.users.values()].map((u) => ({
       name: u.name,
       score: u.score,
     })),
-    hostId: room.hostId,
     hasTracks: !!(room.tracks && room.tracks.length),
     gameStarted: room.answersKnown,
     gameType: room.gameType,
@@ -124,17 +152,22 @@ function broadcastRoom(code) {
     currentRound: room.currentRound
       ? {
           startedAt: room.currentRound.startedAt,
-          solved: room.currentRound.solved,
-          hint: {
-            titleLen: room.currentRound.answer.title?.length || 0,
-            artistLen: room.currentRound.answer.artist?.length || 0,
-          },
+          hint: room.currentRound.hint,
           playback: room.currentRound.playback,
-          buzzer: room.currentRound.buzzer,
+          solved: room.currentRound.solved,
+          buzzer: room.currentRound.buzzer
+            ? {
+                currentId: room.currentRound.buzzer.currentId,
+                currentName: room.currentRound.buzzer.currentName,
+                queue: (room.currentRound.buzzer.queue || []).map(
+                  (q) => q.name,
+                ),
+              }
+            : null,
         }
       : null,
   };
-  io.to(code).emit("roomState", payload);
+  io.to(room.code).emit("roomState", payload);
 }
 
 // ===== REST: Parse + fetch playlists =====
@@ -216,53 +249,68 @@ io.on("connection", (socket) => {
 
   // Join room
   socket.on("joinRoom", async ({ code, name, token }, cb) => {
-    const room = getRoom(code);
+    const room = await getRoom(code);
     if (!room) return cb && cb({ error: "Room does not exist." });
 
-    const cleanName = (name || "").trim().slice(0, 32) || "Player";
-    let finalName = cleanName;
-    let i = 1;
-    while ([...room.users.values()].some((u) => u.name === finalName)) {
-      finalName = `${cleanName}#${i++}`;
-    }
-
-    // Try to find if user already exists (by UID) for session recovery
     let uid = null;
-    if (token && admin.apps.length > 0) {
+    let photoURL = null;
+    if (token) {
       try {
         const decodedToken = await admin.auth().verifyIdToken(token);
         uid = decodedToken.uid;
-      } catch (e) {
-        console.error("Token verification failed:", e.message);
+        photoURL = decodedToken.picture || null;
+      } catch (err) {
+        console.error("Firebase auth error:", err);
       }
     }
 
     if (uid) {
-      // Re-link existing player by UID if they were in the room
+      if (room.hostUid === uid) {
+        room.hostId = socket.id;
+      } else if (!room.hostUid && room.hostId === socket.id) {
+        room.hostUid = uid;
+      }
+
       const existingEntry = [...room.users.entries()].find(
         ([, u]) => u.uid === uid,
       );
+
       if (existingEntry) {
         const [oldSocketId, userData] = existingEntry;
         room.users.delete(oldSocketId);
-        room.users.set(socket.id, userData);
-
-        if (room.hostId === oldSocketId) {
-          room.hostId = socket.id;
-        }
+        room.users.set(socket.id, { ...userData, photoURL });
 
         socket.join(code);
+        await saveRoom(code, room);
         broadcastRoom(code);
         return cb && cb({ ok: true, hostId: room.hostId, recovered: true });
       }
+    } else {
+      // Fallback for non-logged in users (e.g. Host name logic)
+      if (room.hostId === socket.id && !room.hostUid) {
+        // Keep track of host if they aren't logged in (legacy/dev support)
+      }
     }
 
-    room.users.set(socket.id, { name: finalName, score: 0, uid });
+    const newUser = {
+      name: name?.trim() || "Gracz",
+      score: 0,
+      uid,
+      photoURL,
+    };
+
+    // Check if user was already in Firestore (but maybe not in Map yet)
+    if (uid && room.players?.[uid]) {
+      newUser.score = room.players[uid].score;
+    }
+
+    room.users.set(socket.id, newUser);
     socket.join(code);
+    await saveRoom(code, room);
 
     io.to(code).emit("chat", {
       system: true,
-      text: `${finalName} joined the room`,
+      text: `${newUser.name} joined the room`,
     });
 
     broadcastRoom(code);
@@ -366,8 +414,8 @@ io.on("connection", (socket) => {
   });
 
   // Start game (host only)
-  socket.on("startGame", ({ code, mode, tracks, gameType }, cb) => {
-    const room = getRoom(code);
+  socket.on("startGame", async ({ code, mode, tracks, gameType }, cb) => {
+    const room = await getRoom(code);
     if (!room) return cb && cb({ error: "Room does not exist." });
     if (!tracks || tracks.length < 20)
       return cb && cb({ error: "Playlist must have at least 20 tracks." });
@@ -383,6 +431,7 @@ io.on("connection", (socket) => {
     room.currentRound = null;
     room.roundCount = 0;
 
+    await saveRoom(code, room);
     io.to(code).emit("gameStarted", {
       mode: room.mode,
       gameType: room.gameType,
@@ -393,7 +442,7 @@ io.on("connection", (socket) => {
 
   // Next round (host only)
   socket.on("nextRound", async ({ code }, cb) => {
-    const room = getRoom(code);
+    const room = await getRoom(code);
     if (!room) return cb && cb({ error: "Room does not exist." });
     if (room.hostId !== socket.id)
       return cb && cb({ error: "Only the host can start a round." });
@@ -421,20 +470,23 @@ io.on("connection", (socket) => {
 
     room.currentRound = {
       startedAt: Date.now(),
-      answer: { title: track.title, artist: track.artist || "" },
       track,
+      playback,
+      answer: { title: track.title, artist: track.artist || "" },
       solved: false,
       buzzer: null, // set on first buzz
-    };
-
-    const payload = {
-      mode: room.mode,
-      gameType: room.gameType,
-      startedAt: room.currentRound.startedAt,
       hint: {
         titleLen: track.title?.length || 0,
         artistLen: track.artist?.length || 0,
       },
+    };
+
+    await saveRoom(code, room);
+    const payload = {
+      mode: room.mode,
+      gameType: room.gameType,
+      startedAt: room.currentRound.startedAt,
+      hint: room.currentRound.hint,
       playback,
     };
 
@@ -443,8 +495,8 @@ io.on("connection", (socket) => {
   });
 
   // TEXT mode guessing
-  socket.on("guess", ({ code, guessText }, cb) => {
-    const room = getRoom(code);
+  socket.on("guess", async ({ code, guessText }, cb) => {
+    const room = await getRoom(code);
     if (!room || !room.currentRound)
       return cb && cb({ error: "Round is not active." });
     if (room.currentRound.solved)
@@ -481,6 +533,7 @@ io.on("connection", (socket) => {
       }
     }
 
+    await saveRoom(code, room);
     const elapsedMs = Date.now() - room.currentRound.startedAt;
     io.to(code).emit("roundEnd", {
       winner: player?.name || "Ktoś",
@@ -504,8 +557,8 @@ io.on("connection", (socket) => {
   // ===== BUZZER MODE =====
 
   // Player buzzes in — first buzz pauses playback
-  socket.on("buzz", ({ code }, cb) => {
-    const room = getRoom(code);
+  socket.on("buzz", async ({ code }, cb) => {
+    const room = await getRoom(code);
     if (!room || !room.currentRound)
       return cb && cb({ error: "Round is not active." });
     if (room.gameType !== "buzzer")
@@ -530,6 +583,7 @@ io.on("connection", (socket) => {
         at: r.buzzer.tsFirst,
       });
       io.to(code).emit("queueUpdated", { queue: r.buzzer.queue });
+      await saveRoom(code, room);
       return cb && cb({ ok: true, first: true });
     }
 
@@ -539,6 +593,7 @@ io.on("connection", (socket) => {
     if (!isCurrent && !inQueue) {
       r.buzzer.queue.push({ id: socket.id, name: player.name, ts: Date.now() });
       io.to(code).emit("queueUpdated", { queue: r.buzzer.queue });
+      await saveRoom(code, room);
       return cb && cb({ ok: true, queued: true });
     }
 
@@ -546,8 +601,8 @@ io.on("connection", (socket) => {
   });
 
   // Host passes the buzzer to the next person in queue
-  socket.on("passBuzzer", ({ code }, cb) => {
-    const room = getRoom(code);
+  socket.on("passBuzzer", async ({ code }, cb) => {
+    const room = await getRoom(code);
     if (!room) return cb && cb({ error: "Room does not exist." });
     if (room.hostId !== socket.id)
       return cb && cb({ error: "Only the host can pass the buzzer." });
@@ -572,18 +627,20 @@ io.on("connection", (socket) => {
       // ✅ WYMAGANIE: przy przejściu na kolejną osobę wznowić muzykę
       io.to(code).emit("resumePlayback");
 
+      await saveRoom(code, room);
       return cb && cb({ ok: true, passed: true });
     } else {
       r.buzzer = null;
       io.to(code).emit("buzzCleared", {});
       io.to(code).emit("resumePlayback");
+      await saveRoom(code, room);
       return cb && cb({ ok: true, cleared: true });
     }
   });
 
   // Host awards points (buzzer)
-  socket.on("awardPoints", ({ code, playerName, points }, cb) => {
-    const room = getRoom(code);
+  socket.on("awardPoints", async ({ code, playerName, points }, cb) => {
+    const room = await getRoom(code);
     if (!room) return cb && cb({ error: "Room does not exist." });
     if (room.hostId !== socket.id)
       return cb && cb({ error: "Only the host can award points." });
@@ -600,13 +657,14 @@ io.on("connection", (socket) => {
     if (p.uid) {
       updateLeaderboardScore(p.uid, p.name, pts);
     }
+    await saveRoom(code, room);
     broadcastRoom(code);
     cb && cb({ ok: true });
   });
 
   // Host deducts points (buzzer)
-  socket.on("deductPoints", ({ code, playerName, points }, cb) => {
-    const room = getRoom(code);
+  socket.on("deductPoints", async ({ code, playerName, points }, cb) => {
+    const room = await getRoom(code);
     if (!room) return cb && cb({ error: "Room does not exist." });
     if (room.hostId !== socket.id)
       return cb && cb({ error: "Only the host can deduct points." });
@@ -627,13 +685,14 @@ io.on("connection", (socket) => {
       updateLeaderboardScore(p.uid, p.name, -pts);
     }
 
+    await saveRoom(code, room);
     broadcastRoom(code);
     cb && cb({ ok: true });
   });
 
   // Host ends round manually (buzzer)
-  socket.on("endRoundManual", ({ code }, cb) => {
-    const room = getRoom(code);
+  socket.on("endRoundManual", async ({ code }, cb) => {
+    const room = await getRoom(code);
     if (!room || !room.currentRound)
       return cb && cb({ error: "Round is not active." });
     if (room.hostId !== socket.id)
@@ -652,6 +711,7 @@ io.on("connection", (socket) => {
     const winner = room.currentRound.buzzer?.currentName || null;
 
     room.currentRound.solved = true;
+    await saveRoom(code, room);
     io.to(code).emit("roundEnd", {
       winner,
       answer: { title, artist },
@@ -665,56 +725,41 @@ io.on("connection", (socket) => {
     cb && cb({ ok: true });
   });
 
-  // Host verifies answer typed manually (artist & title)
-  socket.on("hostVerifyGuess", ({ code, artist, title }, cb) => {
-    const room = getRoom(code);
-    if (!room || !room.currentRound)
-      return cb && cb({ error: "Round is not active." });
+  // Host manual verification (buzzer mode)
+  socket.on("hostVerifyGuess", async ({ code, artist, title }, cb) => {
+    const room = await getRoom(code);
+    if (!room) return cb && cb({ error: "Room does not exist." });
     if (room.hostId !== socket.id)
-      return cb && cb({ error: "Only the host can verify." });
-    if (room.gameType !== "buzzer")
-      return cb && cb({ error: "Not in buzzer mode." });
+      return cb && cb({ error: "Only the host can verify guesses." });
 
-    const correctTitle = room.currentRound.answer.title;
-    const correctArtist = room.currentRound.answer.artist;
+    const target = room.currentRound?.answer;
+    if (!target) return cb && cb({ error: "Round is not active." });
 
-    const { artistCorrect, titleCorrect } = getDetailedMatch(
-      artist,
-      title,
-      correctArtist,
-      correctTitle,
-    );
+    const match = getDetailedMatch(artist, title, target.artist, target.title);
+    cb({
+      artistCorrect: match.artistCorrect,
+      titleCorrect: match.titleCorrect,
+    });
+  });
 
-    if (artistCorrect && titleCorrect) {
-      cb && cb({ ok: true, artistCorrect, titleCorrect });
-    } else if (artistCorrect || titleCorrect) {
-      // Partially correct - maybe host wants to give a hint or something, but we don't auto-resume yet?
-      // Actually, let's just return the status. The host can decide what to do.
-      cb && cb({ ok: true, artistCorrect, titleCorrect });
-    } else {
-      // Wrong answer (both wrong) -> resume and pass buzzer
-      const r = room.currentRound;
-      if (r.buzzer) {
-        if (r.buzzer.queue.length > 0) {
-          const next = r.buzzer.queue.shift();
-          r.buzzer.currentId = next.id;
-          r.buzzer.currentName = next.name;
+  socket.on("setName", async ({ code, name }, cb) => {
+    const room = await getRoom(code);
+    if (!room) return cb && cb({ error: "Room does not exist." });
 
-          io.to(code).emit("buzzed", {
-            id: r.buzzer.currentId,
-            name: r.buzzer.currentName,
-            at: r.buzzer.tsFirst,
-          });
-          io.to(code).emit("queueUpdated", { queue: r.buzzer.queue });
-          io.to(code).emit("resumePlayback");
-        } else {
-          r.buzzer = null;
-          io.to(code).emit("buzzCleared", {});
-          io.to(code).emit("resumePlayback");
-        }
-      }
+    const player = room.users.get(socket.id);
+    if (player) {
+      player.name = name?.trim().slice(0, 32) || "Player";
+      await saveRoom(code, room);
       broadcastRoom(code);
-      cb && cb({ ok: true, artistCorrect: false, titleCorrect: false });
+      cb && cb({ ok: true });
+    }
+  });
+
+  socket.on("disconnect", async () => {
+    for (const [code, room] of rooms.entries()) {
+      if (room.users.has(socket.id)) {
+        broadcastRoom(code);
+      }
     }
   });
 });
