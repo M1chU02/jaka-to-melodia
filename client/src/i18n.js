@@ -67,6 +67,10 @@ export const dictionaries = {
     logout: "Wyloguj",
     errorLogin: "Błąd podczas logowania przez Google",
     leaderboard: "Ranking graczy",
+    gameOver: "Koniec gry!",
+    finalScores: "Wyniki końcowe:",
+    returnHome: "Powrót do menu",
+    endGame: "Zakończ grę i zobacz wyniki",
   },
 
   en: {
@@ -137,6 +141,10 @@ export const dictionaries = {
     logout: "Sign out",
     errorLogin: "Error during Google sign-in",
     leaderboard: "Leaderboard",
+    gameOver: "Game Over!",
+    finalScores: "Final Scores:",
+    returnHome: "Return Home",
+    endGame: "End game and show results",
   },
 };
 

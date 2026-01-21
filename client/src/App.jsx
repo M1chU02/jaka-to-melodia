@@ -131,7 +131,7 @@ export default function App() {
 
     // Sync stage and round if game is ongoing
     if (payload.gameStarted) {
-      if (stage === "lobby") setStage("playing");
+      if (stage !== "playing") setStage("playing");
 
       if (payload.currentRound && !payload.currentRound.solved) {
         const cur = payload.currentRound;
@@ -162,6 +162,15 @@ export default function App() {
       } else if (round) {
         setRound(null);
       }
+    } else {
+      // Game not started (lobby)
+      if (stage !== "lobby" && stage !== "welcome") {
+        setStage("lobby");
+      } else if (stage === "welcome" && payload.players?.length > 0) {
+        // Technically joinRoom callback handles this, but sync it here too if needed
+        // (Only if we are sure we are in the room - denoted by presence in players or just having roomState)
+        setStage("lobby");
+      }
     }
   });
 
@@ -186,6 +195,13 @@ export default function App() {
         audioRef.current.play().catch(() => {});
       }, 40);
     }
+  });
+
+  useSocketEvent("gameOver", (payload) => {
+    setLastResult(null);
+    setRound(null);
+    setStage("gameOver");
+    setRoomState((prev) => ({ ...prev, players: payload.scores }));
   });
 
   useSocketEvent("roundEnd", (payload) => {
@@ -293,7 +309,11 @@ export default function App() {
         setChatLog([]);
         setRoomCode(roomCode.toUpperCase());
         setIsHost(resp.hostId === socket.id);
-        if (stage === "welcome") setStage("lobby");
+
+        setStage((prev) => {
+          if (prev === "welcome") return "lobby";
+          return prev;
+        });
       },
     );
   }
@@ -368,20 +388,20 @@ export default function App() {
       if (resp?.error) alert(resp.error);
     });
   }
-  function awardPoints(playerName) {
+  function awardPoints(playerName, pts) {
     socket.emit(
       "awardPoints",
-      { code: roomCode, playerName, points: 10 },
+      { code: roomCode, playerName, points: pts },
       (resp) => {
         if (resp?.error) alert(resp.error);
       },
     );
   }
 
-  function deductPoints(playerName) {
+  function deductPoints(playerName, pts) {
     socket.emit(
       "deductPoints",
-      { code: roomCode, playerName, points: 10 },
+      { code: roomCode, playerName, points: pts },
       (resp) => {
         if (resp?.error) alert(resp.error);
       },
@@ -641,7 +661,7 @@ export default function App() {
       {/* Round */}
       {stage === "playing" && (
         <Section
-          title={dict.round}
+          title={`${dict.round} ${roomState?.roundCount || 0}/20`}
           toolbar={
             <div className="row">
               <button className="muteBtn" onClick={() => setMuted((m) => !m)}>
@@ -746,12 +766,22 @@ export default function App() {
                       />
                       <button
                         className="btn"
-                        onClick={() => awardPoints(awardPlayer)}>
+                        onClick={() => awardPoints(awardPlayer, 5)}>
+                        +5
+                      </button>
+                      <button
+                        className="btn"
+                        onClick={() => awardPoints(awardPlayer, 10)}>
                         +10
                       </button>
                       <button
                         className="btn"
-                        onClick={() => deductPoints(awardPlayer)}>
+                        onClick={() => deductPoints(awardPlayer, 5)}>
+                        -5
+                      </button>
+                      <button
+                        className="btn"
+                        onClick={() => deductPoints(awardPlayer, 10)}>
                         -10
                       </button>
                       <button className="btn" onClick={passBuzzer}>
@@ -849,9 +879,38 @@ export default function App() {
 
           {isHost && (
             <button className="btn ghost" onClick={nextRound}>
-              {dict.nextRound}
+              {roomState?.roundCount === 20
+                ? dict.endGame || "Zakończ grę"
+                : dict.nextRound}
             </button>
           )}
+        </Section>
+      )}
+
+      {/* Game Over */}
+      {stage === "gameOver" && (
+        <Section title={dict.gameOver || "Koniec gry"}>
+          <div className="grid">
+            <h3>{dict.finalScores || "Wyniki końcowe"}</h3>
+            <ul className="list">
+              {roomState?.players
+                ?.sort((a, b) => b.score - a.score)
+                .map((p, idx) => (
+                  <li
+                    key={p.name}
+                    style={{
+                      fontSize: idx === 0 ? "1.4em" : "1em",
+                      fontWeight: idx === 0 ? "bold" : "normal",
+                    }}>
+                    {idx === 0 ? "👑 " : ""}
+                    {p.name} — {p.score} pkt
+                  </li>
+                ))}
+            </ul>
+            <button className="btn" onClick={goHome}>
+              {dict.returnHome || "Powrót"}
+            </button>
+          </div>
         </Section>
       )}
 

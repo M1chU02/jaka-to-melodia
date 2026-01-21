@@ -60,7 +60,7 @@ const rooms = new Map();
 // room = {
 //   code, hostId, users: Map(socketId => {name, score}), mode: 'spotify'|'youtube',
 //   tracks: [ ... ], answersKnown: boolean,
-//   gameType: 'text'|'buzzer',
+//   gameType: 'text'|'buzzer', roundCount: 0,
 //   currentRound: {
 //     startedAt, answer: {title, artist}, track: {...}, solved: false,
 //     buzzer: null | { tsFirst, currentId, currentName, queue: [{id,name,ts}] }
@@ -120,6 +120,7 @@ function broadcastRoom(code) {
     hasTracks: !!(room.tracks && room.tracks.length),
     gameStarted: room.answersKnown,
     gameType: room.gameType,
+    roundCount: room.roundCount || 0,
     currentRound: room.currentRound
       ? {
           startedAt: room.currentRound.startedAt,
@@ -368,16 +369,20 @@ io.on("connection", (socket) => {
   socket.on("startGame", ({ code, mode, tracks, gameType }, cb) => {
     const room = getRoom(code);
     if (!room) return cb && cb({ error: "Room does not exist." });
-    if (room.hostId !== socket.id)
-      return cb && cb({ error: "Only the host can start the game." });
-    if (!tracks || !tracks.length)
-      return cb && cb({ error: "No tracks loaded." });
+    if (!tracks || tracks.length < 20)
+      return cb && cb({ error: "Playlist must have at least 20 tracks." });
 
     room.mode = mode; // spotify | youtube
     room.gameType = gameType || "text"; // text | buzzer
-    room.tracks = tracks;
+
+    // Shuffle and pick 20
+    const shuffled = [...tracks].sort(() => Math.random() - 0.5);
+    room.tracks = shuffled.slice(0, 20);
+
     room.answersKnown = true;
     room.currentRound = null;
+    room.roundCount = 0;
+
     io.to(code).emit("gameStarted", {
       mode: room.mode,
       gameType: room.gameType,
@@ -392,26 +397,27 @@ io.on("connection", (socket) => {
     if (!room) return cb && cb({ error: "Room does not exist." });
     if (room.hostId !== socket.id)
       return cb && cb({ error: "Only the host can start a round." });
-    if (!room.tracks || !room.tracks.length)
-      return cb && cb({ error: "No tracks available." });
 
-    const pool = room.tracks.slice();
-    let track = null,
-      playback = null;
-
-    for (let i = 0; i < Math.min(20, pool.length); i++) {
-      const candidate = pool[Math.floor(Math.random() * pool.length)];
-      const pb = await buildPlaybackForTrack(candidate, room.mode);
-      if (pb) {
-        track = candidate;
-        playback = pb;
-        break;
-      }
+    if (room.roundCount >= 20) {
+      // Game over
+      io.to(code).emit("gameOver", {
+        scores: [...room.users.values()].map((u) => ({
+          name: u.name,
+          score: u.score,
+        })),
+      });
+      return cb && cb({ ok: true, gameOver: true });
     }
 
-    if (!track || !playback) {
-      return cb && cb({ error: "No playable tracks (Spotify previews)." });
+    const track = room.tracks[room.roundCount];
+    if (!track) return cb && cb({ error: "No track found for this round." });
+
+    const playback = await buildPlaybackForTrack(track, room.mode);
+    if (!playback) {
+      return cb && cb({ error: "Could not load playback for track." });
     }
+
+    room.roundCount++;
 
     room.currentRound = {
       startedAt: Date.now(),
@@ -448,17 +454,30 @@ io.on("connection", (socket) => {
     }
 
     const { title, artist } = room.currentRound.answer;
-    const correct = isGuessCorrect(guessText || "", title, artist);
-    if (!correct) {
+    const { artistCorrect, titleCorrect } = getDetailedMatch(
+      "", // we don't separate artist/title in text input
+      guessText,
+      artist,
+      title,
+    );
+
+    let points = 0;
+    if (artistCorrect && titleCorrect) {
+      points = 10;
+    } else if (titleCorrect) {
+      points = 5;
+    }
+
+    if (points === 0) {
       return cb && cb({ ok: true, correct: false });
     }
 
     room.currentRound.solved = true;
     const player = room.users.get(socket.id);
     if (player) {
-      player.score += 10;
+      player.score += points;
       if (player.uid) {
-        updateLeaderboardScore(player.uid, player.name, 10);
+        updateLeaderboardScore(player.uid, player.name, points);
       }
     }
 
@@ -576,7 +595,7 @@ io.on("connection", (socket) => {
     );
     if (!entry) return cb && cb({ error: "Player not found." });
     const p = entry[1];
-    const pts = Number(points) || 0;
+    const pts = Number(points) || 10;
     p.score += pts;
     if (p.uid) {
       updateLeaderboardScore(p.uid, p.name, pts);
@@ -600,7 +619,7 @@ io.on("connection", (socket) => {
     if (!entry) return cb && cb({ error: "Player not found." });
 
     const p = entry[1];
-    const pts = Number(points) || 0;
+    const pts = Number(points) || 10;
     p.score -= pts;
     if (p.score < 0) p.score = 0;
 
