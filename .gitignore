@@ -3,3 +3,4 @@ server/node_modules
 client/.env
 server/.env
 server/firebase-service-account.json
+client/firebase.js
