@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import axios from "axios";
 import dotenv from "dotenv";
+import { YouTube } from "youtube-sr";
 import http from "http";
 import { Server } from "socket.io";
 import { nanoid } from "nanoid";
@@ -98,12 +99,12 @@ const rooms = new Map();
 
 async function buildPlaybackForTrack(track, mode) {
   if (mode === "spotify") {
-    // 1. Use pre-fetched videoId if available (even if quota is exceeded)
+    // 1. Use pre-fetched videoId if available
     if (track.videoId) {
       return { type: "youtube", videoId: track.videoId };
     }
 
-    // 2. Fallback: Spotify preview (Free, saves YT quota)
+    // 2. Fallback: Spotify preview (Free)
     if (track.previewUrl) {
       return {
         type: "audio",
@@ -112,12 +113,15 @@ async function buildPlaybackForTrack(track, mode) {
       };
     }
 
-    // 3. Last Layer: Search on YouTube (Only if quota available)
-    if (checkYtQuota()) {
-      const videoId = await getYouTubeVideoId(track.title, track.artist);
-      if (videoId) {
-        return { type: "youtube", videoId };
+    // 3. Last Layer: Scraper search via youtube-sr (Reliable & No Quota)
+    try {
+      const q = [track.title, track.artist].filter(Boolean).join(" ");
+      const v = await YouTube.searchOne(q);
+      if (v?.id) {
+        return { type: "youtube", videoId: v.id };
       }
+    } catch (e) {
+      console.error("youtube-sr error during Spotify playback fallback:", e);
     }
 
     console.log(
@@ -151,25 +155,33 @@ async function buildPlaybackForTrack(track, mode) {
     // 2. Fallback search (only if ID is missing)
     const q = [track.title, track.artist].filter(Boolean).join(" ");
     try {
-      const r = await axios.get(
-        "https://www.googleapis.com/youtube/v3/search",
-        {
-          params: {
-            key: process.env.YT_API_KEY,
-            q,
-            type: "video",
-            maxResults: 1,
-            videoEmbeddable: "true",
-            part: "snippet",
-          },
-        },
-      );
-      const item = r.data.items?.[0];
-      if (item?.id?.videoId) {
-        return { type: "youtube", videoId: item.id.videoId };
-      } else {
-        console.warn("No YouTube results found for:", q);
+      // Prefer scraper (youtube-sr) as it's free and fast
+      const v = await YouTube.searchOne(q);
+      if (v?.id) {
+        return { type: "youtube", videoId: v.id };
       }
+
+      // Final desperate attempt via official API (if quota allowed)
+      if (checkYtQuota()) {
+        const r = await axios.get(
+          "https://www.googleapis.com/youtube/v3/search",
+          {
+            params: {
+              key: process.env.YT_API_KEY,
+              q,
+              type: "video",
+              maxResults: 1,
+              videoEmbeddable: "true",
+              part: "snippet",
+            },
+          },
+        );
+        const item = r.data.items?.[0];
+        if (item?.id?.videoId) {
+          return { type: "youtube", videoId: item.id.videoId };
+        }
+      }
+      console.warn("No YouTube results found for:", q);
     } catch (e) {
       const errorData = e?.response?.data;
       if (errorData?.error?.errors?.[0]?.reason === "quotaExceeded") {
@@ -188,42 +200,14 @@ async function buildPlaybackForTrack(track, mode) {
 }
 
 // Helper to search a single track on YouTube (used for Spotify workaround)
+// Helper to find YouTube ID via youtube-sr (Reliable, No Quota)
 async function getYouTubeVideoId(title, artist) {
-  if (!process.env.YT_API_KEY || !checkYtQuota()) return null;
   const q = [title, artist].filter(Boolean).join(" ");
   try {
-    const r = await axios.get("https://www.googleapis.com/youtube/v3/search", {
-      params: {
-        key: process.env.YT_API_KEY,
-        q,
-        type: "video",
-        maxResults: 1,
-        videoEmbeddable: "true",
-        part: "snippet",
-      },
-    });
-    const item = r.data.items?.[0];
-    return item?.id?.videoId || null;
+    const v = await YouTube.searchOne(q);
+    return v?.id || null;
   } catch (e) {
-    const errorData = e?.response?.data;
-    if (errorData?.error?.errors?.[0]?.reason === "quotaExceeded") {
-      ytQuotaExceeded = true;
-      ytQuotaResetTime = Date.now() + 1000 * 60 * 60 * 12;
-    }
-    return null;
-  }
-}
-
-// Helper to find YouTube ID via Odesli (Songlink) - Free & No Quota
-async function getYouTubeIdViaOdesli(spotifyId) {
-  try {
-    const url = `https://api.song.link/v1-user/links?platform=spotify&type=song&id=${spotifyId}`;
-    const r = await axios.get(url);
-    const ytId = r.data?.linksByPlatform?.youtube?.url?.match(
-      /(?:v=|\/)([a-zA-Z0-9_-]{11})/,
-    )?.[1];
-    return ytId || null;
-  } catch (e) {
+    console.error(`youtube-sr search failed for ${q}:`, e.message);
     return null;
   }
 }
@@ -315,27 +299,20 @@ app.post("/api/parse-playlist", async (req, res) => {
         clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
       });
 
-      // --- AUTOMATIC YT WORKAROUND (Odesli + YT Search Fallback) ---
+      // --- AUTOMATIC YT WORKAROUND (youtube-sr) ---
       // We pick 20 random tracks
       const allTracks = data.tracks || [];
       const shuffled = [...allTracks].sort(() => Math.random() - 0.5);
       const chosen = shuffled.slice(0, 20);
 
       console.log(
-        `Enriching 20 Spotify tracks with YouTube video IDs using Odesli for playlist: ${data.playlistId}`,
+        `Enriching 20 Spotify tracks with YouTube video IDs using youtube-sr for playlist: ${data.playlistId}`,
       );
 
       // Perform searches in parallel
       const enrichedTracks = await Promise.all(
         chosen.map(async (t) => {
-          // 1. Try Odesli (Free, fast)
-          let videoId = await getYouTubeIdViaOdesli(t.id);
-
-          // 2. Fallback to YT Search (Only if Odesli fails and quota available)
-          if (!videoId && checkYtQuota()) {
-            videoId = await getYouTubeVideoId(t.title, t.artist);
-          }
-
+          const videoId = await getYouTubeVideoId(t.title, t.artist);
           return { ...t, videoId };
         }),
       );
