@@ -98,20 +98,20 @@ const rooms = new Map();
 
 async function buildPlaybackForTrack(track, mode) {
   if (mode === "spotify") {
-    // Support pre-fetched YouTube workaround
+    // 1. Use pre-fetched videoId if available
     if (track.videoId) {
       return { type: "youtube", videoId: track.videoId };
     }
 
-    if (track.previewUrl) {
-      return {
-        type: "audio",
-        previewUrl: track.previewUrl,
-        cover: track.cover,
-      };
+    // 2. Fallback: Search on YouTube on-the-fly if videoId is missing
+    const videoId = await getYouTubeVideoId(track.title, track.artist);
+    if (videoId) {
+      return { type: "youtube", videoId };
     }
-    // No preview on Spotify?
-    console.log(`Spotify track missing preview: ${track.title}. Skipping.`);
+
+    console.log(
+      `YouTube lookup failed for Spotify track: ${track.title}. Skipping.`,
+    );
     return null;
   }
 
