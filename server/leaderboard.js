@@ -1,7 +1,11 @@
 import admin from "firebase-admin";
 
 export async function updateLeaderboardScore(uid, name, scoreIncrement) {
-  if (!admin.apps.length) return;
+  if (!admin.apps.length) {
+    console.warn("Firestore not initialized, skip updateLeaderboardScore");
+    return;
+  }
+  console.log(`Updating leaderboard for ${name} (${uid}) by ${scoreIncrement}`);
   const db = admin.firestore();
   const userRef = db.collection("leaderboard").doc(uid);
 

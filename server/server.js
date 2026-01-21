@@ -30,6 +30,7 @@ const serviceAccountPath = path.join(
   __dirname,
   "firebase-service-account.json",
 );
+
 if (fs.existsSync(serviceAccountPath)) {
   const serviceAccount = JSON.parse(
     fs.readFileSync(serviceAccountPath, "utf8"),
@@ -37,9 +38,21 @@ if (fs.existsSync(serviceAccountPath)) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
   });
+  console.log("Firebase Admin initialized successfully via JSON file.");
+} else if (process.env.FIREBASE_PROJECT_ID) {
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+    }),
+  });
+  console.log(
+    "Firebase Admin initialized successfully via environment variables.",
+  );
 } else {
   console.warn(
-    "Firebase Service Account key not found. Authentication will be disabled.",
+    `Firebase Service Account not found (no JSON at ${serviceAccountPath} and no FIREBASE_PROJECT_ID env). Authentication and Firestore will be disabled.`,
   );
 }
 
@@ -230,18 +243,21 @@ app.get("/api/leaderboard", async (req, res) => {
 // ===== SOCKETS =====
 io.on("connection", (socket) => {
   // Create room
-  socket.on("createRoom", (cb) => {
+  socket.on("createRoom", async (cb) => {
     const code = newRoomCode();
-    rooms.set(code, {
+    const room = {
       code,
       hostId: socket.id,
+      hostUid: "", // will be set on join
       users: new Map(),
       mode: null,
       tracks: [],
       answersKnown: false,
       gameType: "text",
       currentRound: null,
-    });
+    };
+    rooms.set(code, room);
+    await saveRoom(code, room);
     socket.join(code);
     cb && cb({ code });
     broadcastRoom(code);
@@ -657,6 +673,7 @@ io.on("connection", (socket) => {
     if (p.uid) {
       updateLeaderboardScore(p.uid, p.name, pts);
     }
+
     await saveRoom(code, room);
     broadcastRoom(code);
     cb && cb({ ok: true });

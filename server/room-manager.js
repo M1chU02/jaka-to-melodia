@@ -19,7 +19,11 @@ import admin from "firebase-admin";
  */
 
 export async function saveRoom(code, data) {
-  if (!admin.apps.length) return;
+  if (!admin.apps.length) {
+    console.warn("Firestore not initialized, skip saveRoom");
+    return;
+  }
+  console.log(`Saving room ${code} to Firestore...`);
   const db = admin.firestore();
   try {
     // Clean up data for Firestore (remove socket IDs, maps)
@@ -52,9 +56,13 @@ export async function saveRoom(code, data) {
 }
 
 export async function getRoomFromFirestore(code) {
-  if (!admin.apps.length) return null;
+  if (!admin.apps.length) {
+    console.warn("Firestore not initialized, skip getRoomFromFirestore");
+    return null;
+  }
   const db = admin.firestore();
   try {
+    console.log(`Fetching room ${code} from Firestore...`);
     const doc = await db.collection("rooms").doc(code).get();
     if (!doc.exists) return null;
     return doc.data();
