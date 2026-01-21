@@ -3,6 +3,8 @@ import io from "socket.io-client";
 import YouTube from "react-youtube";
 import { dictionaries, getInitialLang } from "./i18n.js";
 import CustomSelect from "./components/CustomSelect.jsx";
+import { auth, googleProvider } from "./firebase.js";
+import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:4000";
 const socket = io(SERVER_URL, { transports: ["websocket"] });
@@ -45,6 +47,18 @@ export default function App() {
   const [isHost, setIsHost] = useState(false);
   const [roomState, setRoomState] = useState(null);
   const [chatLog, setChatLog] = useState([]);
+  const [user, setUser] = useState(null);
+
+  // Monitor auth state
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      if (u) {
+        setName(u.displayName);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // ===== Playlist (host) =====
   const [playlistUrl, setPlaylistUrl] = useState("");
@@ -66,6 +80,8 @@ export default function App() {
   const [hostArtist, setHostArtist] = useState("");
   const [hostTitle, setHostTitle] = useState("");
   const [verifyStatus, setVerifyStatus] = useState(null); // { artist: bool, title: bool }
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
 
   // ===== Players (media refs) =====
   const audioRef = useRef(null);
@@ -180,23 +196,42 @@ export default function App() {
   }
 
   function createRoom() {
-    socket.emit("createRoom", ({ code }) => {
+    socket.emit("createRoom", async ({ code }) => {
       setRoomCode(code);
       setIsHost(true);
       setStage("lobby");
       setChatLog([]);
-      const finalName = name?.trim() || "Host";
+      const finalName = name?.trim() || user?.displayName || "Host";
       setName(finalName);
-      socket.emit("joinRoom", { code, name: finalName }, () => {});
+
+      const token = user ? await user.getIdToken() : null;
+      socket.emit("joinRoom", { code, name: finalName, token }, () => {});
     });
   }
 
-  function joinRoom() {
+  async function login() {
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      setUser(result.user);
+      setName(result.user.displayName);
+    } catch (e) {
+      console.error(e);
+      alert(dict.errorLogin || "Błąd logowania");
+    }
+  }
+
+  async function logout() {
+    await signOut(auth);
+    setUser(null);
+  }
+
+  async function joinRoom() {
     if (!roomCode) return;
-    const finalName = name?.trim() || "Gracz";
+    const finalName = name?.trim() || user?.displayName || "Gracz";
+    const token = user ? await user.getIdToken() : null;
     socket.emit(
       "joinRoom",
-      { code: roomCode.toUpperCase(), name: finalName },
+      { code: roomCode.toUpperCase(), name: finalName, token },
       (resp) => {
         if (resp?.error) return alert(resp.error);
         setChatLog([]);
@@ -346,6 +381,17 @@ export default function App() {
     label: p.name,
   }));
 
+  async function fetchLeaderboard() {
+    try {
+      const r = await fetch(`${SERVER_URL}/api/leaderboard`);
+      const data = await r.json();
+      setLeaderboard(data);
+      setShowLeaderboard(true);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   return (
     <div className="container">
       {/* Header */}
@@ -361,6 +407,9 @@ export default function App() {
             value={lang}
             onChange={(val) => setLang(val)}
           />
+          <button className="btn ghost" onClick={fetchLeaderboard}>
+            🏆 {dict.leaderboard || "Ranking"}
+          </button>
         </div>
       </div>
       <p className="subtitle">{dict.subtitle}</p>
@@ -390,6 +439,32 @@ export default function App() {
             <button className="btn secondary" onClick={createRoom}>
               {dict.createRoom}
             </button>
+          </div>
+
+          <div
+            className="row"
+            style={{ marginTop: 24, justifyContent: "center" }}>
+            {user ? (
+              <div className="row">
+                <img
+                  src={user.photoURL}
+                  style={{ width: 32, height: 32, borderRadius: "50%" }}
+                  alt="avatar"
+                />
+                <span className="kbd">{user.displayName}</span>
+                <button className="btn ghost" onClick={logout}>
+                  {dict.logout || "Wyloguj"}
+                </button>
+              </div>
+            ) : (
+              <button
+                className="btn"
+                onClick={login}
+                style={{ backgroundColor: "#4285f4" }}>
+                <span style={{ marginRight: 8 }}>G</span>{" "}
+                {dict.loginWithGoogle || "Zaloguj przez Google"}
+              </button>
+            )}
           </div>
         </Section>
       )}
@@ -698,32 +773,60 @@ export default function App() {
                   )}
                 </div>
               )}
-
-              {lastResult && (
-                <div className="card">
-                  <b>
-                    {lastResult.winner
-                      ? dict.winner(
-                          lastResult.winner,
-                          Math.round(lastResult.elapsedMs / 100) / 10,
-                        )
-                      : ""}
-                  </b>
-                  <br />
-                  {dict.itWas(
-                    lastResult.answer.title,
-                    lastResult.answer.artist,
-                  )}
-                </div>
-              )}
-
-              {isHost && (
-                <button className="btn ghost" onClick={nextRound}>
-                  {dict.nextRound}
-                </button>
-              )}
             </div>
           )}
+
+          {lastResult && (
+            <div className="card">
+              <b>
+                {lastResult.winner
+                  ? dict.winner(
+                      lastResult.winner,
+                      Math.round(lastResult.elapsedMs / 100) / 10,
+                    )
+                  : ""}
+              </b>
+              <br />
+              {dict.itWas(lastResult.answer.title, lastResult.answer.artist)}
+            </div>
+          )}
+
+          {isHost && (
+            <button className="btn ghost" onClick={nextRound}>
+              {dict.nextRound}
+            </button>
+          )}
+        </Section>
+      )}
+
+      {/* Leaderboard Section */}
+      {showLeaderboard && (
+        <Section
+          title={dict.leaderboard || "Ranking"}
+          toolbar={
+            <button
+              className="btn ghost"
+              onClick={() => setShowLeaderboard(false)}>
+              X
+            </button>
+          }>
+          <ul className="list">
+            {leaderboard.map((entry, idx) => (
+              <li
+                key={entry.uid}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  padding: "8px 0",
+                  borderBottom: "1px solid #323f4b",
+                }}>
+                <span>
+                  {idx + 1}. {entry.name}
+                </span>
+                <b>{entry.score} pkt</b>
+              </li>
+            ))}
+          </ul>
         </Section>
       )}
     </div>

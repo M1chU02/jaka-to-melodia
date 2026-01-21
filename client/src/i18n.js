@@ -63,6 +63,10 @@ export const dictionaries = {
     titleOk: "✅ Tytuł OK",
     titleError: "❌ Tytuł BŁĄD",
     allCorrect: "Wszystko poprawne! Przyznaj punkty.",
+    loginWithGoogle: "Zaloguj przez Google",
+    logout: "Wyloguj",
+    errorLogin: "Błąd podczas logowania przez Google",
+    leaderboard: "Ranking graczy",
   },
 
   en: {
@@ -129,6 +133,10 @@ export const dictionaries = {
     titleOk: "✅ Title OK",
     titleError: "❌ Title ERROR",
     allCorrect: "Everything correct! Award points.",
+    loginWithGoogle: "Sign in with Google",
+    logout: "Sign out",
+    errorLogin: "Error during Google sign-in",
+    leaderboard: "Leaderboard",
   },
 };
 

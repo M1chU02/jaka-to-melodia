@@ -11,6 +11,32 @@ import {
 } from "./spotify.js";
 import { fetchYouTubePlaylist, parseYouTubePlaylistId } from "./youtube.js";
 import { isGuessCorrect, getDetailedMatch } from "./utils.js";
+import { updateLeaderboardScore, getLeaderboard } from "./leaderboard.js";
+import admin from "firebase-admin";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Initialize Firebase Admin
+const serviceAccountPath = path.join(
+  __dirname,
+  "firebase-service-account.json",
+);
+if (fs.existsSync(serviceAccountPath)) {
+  const serviceAccount = JSON.parse(
+    fs.readFileSync(serviceAccountPath, "utf8"),
+  );
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+} else {
+  console.warn(
+    "Firebase Service Account key not found. Authentication will be disabled.",
+  );
+}
 
 dotenv.config();
 
@@ -150,6 +176,15 @@ app.post("/api/parse-playlist", async (req, res) => {
   }
 });
 
+app.get("/api/leaderboard", async (req, res) => {
+  try {
+    const list = await getLeaderboard();
+    res.json(list);
+  } catch (e) {
+    res.status(500).json({ error: "Failed to fetch leaderboard" });
+  }
+});
+
 // ===== SOCKETS =====
 io.on("connection", (socket) => {
   // Create room
@@ -171,7 +206,7 @@ io.on("connection", (socket) => {
   });
 
   // Join room
-  socket.on("joinRoom", ({ code, name }, cb) => {
+  socket.on("joinRoom", async ({ code, name, token }, cb) => {
     const room = getRoom(code);
     if (!room) return cb && cb({ error: "Room does not exist." });
 
@@ -182,7 +217,33 @@ io.on("connection", (socket) => {
       finalName = `${cleanName}#${i++}`;
     }
 
-    room.users.set(socket.id, { name: finalName, score: 0 });
+    // Try to find if user already exists (by UID) for session recovery
+    let uid = null;
+    if (token && admin.apps.length > 0) {
+      try {
+        const decodedToken = await admin.auth().verifyIdToken(token);
+        uid = decodedToken.uid;
+      } catch (e) {
+        console.error("Token verification failed:", e.message);
+      }
+    }
+
+    if (uid) {
+      // Re-link existing player by UID if they were in the room
+      const existingEntry = [...room.users.entries()].find(
+        ([, u]) => u.uid === uid,
+      );
+      if (existingEntry) {
+        const [oldSocketId, userData] = existingEntry;
+        room.users.delete(oldSocketId);
+        room.users.set(socket.id, userData);
+        socket.join(code);
+        broadcastRoom(code);
+        return cb && cb({ ok: true, hostId: room.hostId, recovered: true });
+      }
+    }
+
+    room.users.set(socket.id, { name: finalName, score: 0, uid });
     socket.join(code);
 
     io.to(code).emit("chat", {
@@ -381,7 +442,12 @@ io.on("connection", (socket) => {
 
     room.currentRound.solved = true;
     const player = room.users.get(socket.id);
-    if (player) player.score += 10;
+    if (player) {
+      player.score += 10;
+      if (player.uid) {
+        updateLeaderboardScore(player.uid, player.name, 10);
+      }
+    }
 
     const elapsedMs = Date.now() - room.currentRound.startedAt;
     io.to(code).emit("roundEnd", {
@@ -496,7 +562,12 @@ io.on("connection", (socket) => {
       ([, u]) => u.name === playerName,
     );
     if (!entry) return cb && cb({ error: "Player not found." });
-    entry[1].score += Number(points) || 0;
+    const p = entry[1];
+    const pts = Number(points) || 0;
+    p.score += pts;
+    if (p.uid) {
+      updateLeaderboardScore(p.uid, p.name, pts);
+    }
     broadcastRoom(code);
     cb && cb({ ok: true });
   });
@@ -515,8 +586,14 @@ io.on("connection", (socket) => {
     );
     if (!entry) return cb && cb({ error: "Player not found." });
 
-    entry[1].score -= Number(points) || 0;
-    if (entry[1].score < 0) entry[1].score = 0;
+    const p = entry[1];
+    const pts = Number(points) || 0;
+    p.score -= pts;
+    if (p.score < 0) p.score = 0;
+
+    if (p.uid) {
+      updateLeaderboardScore(p.uid, p.name, -pts);
+    }
 
     broadcastRoom(code);
     cb && cb({ ok: true });
