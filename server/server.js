@@ -98,6 +98,11 @@ const rooms = new Map();
 
 async function buildPlaybackForTrack(track, mode) {
   if (mode === "spotify") {
+    // Support pre-fetched YouTube workaround
+    if (track.videoId) {
+      return { type: "youtube", videoId: track.videoId };
+    }
+
     if (track.previewUrl) {
       return {
         type: "audio",
@@ -105,7 +110,7 @@ async function buildPlaybackForTrack(track, mode) {
         cover: track.cover,
       };
     }
-    // No preview on Spotify? We don't fall back to YouTube anymore to save quota.
+    // No preview on Spotify?
     console.log(`Spotify track missing preview: ${track.title}. Skipping.`);
     return null;
   }
@@ -160,6 +165,33 @@ async function buildPlaybackForTrack(track, mode) {
     }
   }
   return null;
+}
+
+// Helper to search a single track on YouTube (used for Spotify workaround)
+async function getYouTubeVideoId(title, artist) {
+  if (!process.env.YT_API_KEY || !checkYtQuota()) return null;
+  const q = [title, artist].filter(Boolean).join(" ");
+  try {
+    const r = await axios.get("https://www.googleapis.com/youtube/v3/search", {
+      params: {
+        key: process.env.YT_API_KEY,
+        q,
+        type: "video",
+        maxResults: 1,
+        videoEmbeddable: "true",
+        part: "snippet",
+      },
+    });
+    const item = r.data.items?.[0];
+    return item?.id?.videoId || null;
+  } catch (e) {
+    const errorData = e?.response?.data;
+    if (errorData?.error?.errors?.[0]?.reason === "quotaExceeded") {
+      ytQuotaExceeded = true;
+      ytQuotaResetTime = Date.now() + 1000 * 60 * 60 * 12;
+    }
+    return null;
+  }
 }
 
 function newRoomCode() {
@@ -248,7 +280,31 @@ app.post("/api/parse-playlist", async (req, res) => {
         clientId: process.env.SPOTIFY_CLIENT_ID,
         clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
       });
-      return res.json(data);
+
+      // --- AUTOMATIC YT WORKAROUND ---
+      // We pick 20 random tracks and find them on YouTube immediately
+      const allTracks = data.tracks || [];
+      const shuffled = [...allTracks].sort(() => Math.random() - 0.5);
+      const chosen = shuffled.slice(0, 20);
+
+      console.log(
+        `Augmenting 20 Spotify tracks with YouTube video IDs for playlist: ${data.playlistId}`,
+      );
+
+      // Perform searches in parallel
+      const enrichedTracks = await Promise.all(
+        chosen.map(async (t) => {
+          const videoId = await getYouTubeVideoId(t.title, t.artist);
+          return { ...t, videoId };
+        }),
+      );
+
+      return res.json({
+        ...data,
+        total: enrichedTracks.length,
+        playable: enrichedTracks.filter((t) => t.videoId).length,
+        tracks: enrichedTracks,
+      });
     }
 
     if (parseYouTubePlaylistId(url)) {
@@ -478,8 +534,8 @@ io.on("connection", (socket) => {
   socket.on("startGame", async ({ code, mode, tracks, gameType }, cb) => {
     const room = await getRoom(code);
     if (!room) return cb && cb({ error: "Room does not exist." });
-    if (!tracks || tracks.length < 20)
-      return cb && cb({ error: "Playlist must have at least 20 tracks." });
+    if (!tracks || tracks.length < 1)
+      return cb && cb({ error: "Playlist must have at least 1 track." });
 
     room.mode = mode; // spotify | youtube
     room.gameType = gameType || "text"; // text | buzzer
@@ -508,7 +564,7 @@ io.on("connection", (socket) => {
     if (room.hostId !== socket.id)
       return cb && cb({ error: "Only the host can start a round." });
 
-    if (room.roundCount >= 20) {
+    if (room.roundCount >= room.tracks.length || room.roundCount >= 20) {
       // Game over
       io.to(code).emit("gameOver", {
         scores: [...room.users.values()].map((u) => ({
