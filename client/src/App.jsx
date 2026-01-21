@@ -107,7 +107,36 @@ export default function App() {
   }, [volume, muted]);
 
   // ===== Sockets =====
-  useSocketEvent("roomState", (payload) => setRoomState(payload));
+  useSocketEvent("roomState", (payload) => {
+    setRoomState(payload);
+    if (payload.gameType) setGameType(payload.gameType);
+
+    // Sync stage and round if game is ongoing
+    if (payload.gameStarted) {
+      if (stage === "lobby") setStage("playing");
+
+      if (payload.currentRound && !payload.currentRound.solved) {
+        if (
+          !round ||
+          round.playback?.previewUrl !==
+            payload.currentRound.playback?.previewUrl ||
+          round.playback?.videoId !== payload.currentRound.playback?.videoId
+        ) {
+          setRound(payload.currentRound);
+        }
+        // Also sync buzzer state
+        if (payload.currentRound.buzzer) {
+          setFirstBuzz({
+            id: payload.currentRound.buzzer.currentId,
+            name: payload.currentRound.buzzer.currentName,
+          });
+          setBuzzQueue(payload.currentRound.buzzer.queue || []);
+        }
+      } else {
+        setRound(null);
+      }
+    }
+  });
 
   useSocketEvent("gameStarted", (payload) => {
     if (payload?.gameType) setGameType(payload.gameType);
@@ -237,7 +266,7 @@ export default function App() {
         setChatLog([]);
         setRoomCode(roomCode.toUpperCase());
         setIsHost(resp.hostId === socket.id);
-        setStage("lobby");
+        if (stage === "welcome") setStage("lobby");
       },
     );
   }

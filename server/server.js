@@ -118,10 +118,18 @@ function broadcastRoom(code) {
     })),
     hostId: room.hostId,
     hasTracks: !!(room.tracks && room.tracks.length),
+    gameStarted: room.answersKnown,
+    gameType: room.gameType,
     currentRound: room.currentRound
       ? {
           startedAt: room.currentRound.startedAt,
           solved: room.currentRound.solved,
+          hint: {
+            titleLen: room.currentRound.answer.title?.length || 0,
+            artistLen: room.currentRound.answer.artist?.length || 0,
+          },
+          playback: room.currentRound.playback,
+          buzzer: room.currentRound.buzzer,
         }
       : null,
   };
@@ -237,6 +245,11 @@ io.on("connection", (socket) => {
         const [oldSocketId, userData] = existingEntry;
         room.users.delete(oldSocketId);
         room.users.set(socket.id, userData);
+
+        if (room.hostId === oldSocketId) {
+          room.hostId = socket.id;
+        }
+
         socket.join(code);
         broadcastRoom(code);
         return cb && cb({ ok: true, hostId: room.hostId, recovered: true });
