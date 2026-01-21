@@ -74,6 +74,16 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 4000;
 
 // ===== In-memory game state =====
+let ytQuotaExceeded = false;
+let ytQuotaResetTime = 0;
+
+function checkYtQuota() {
+  if (ytQuotaExceeded && Date.now() > ytQuotaResetTime) {
+    ytQuotaExceeded = false;
+  }
+  return !ytQuotaExceeded;
+}
+
 // { [code]: { code, hostId, users: Map, ... } }
 const rooms = new Map();
 // room = {
@@ -87,15 +97,29 @@ const rooms = new Map();
 // }
 
 async function buildPlaybackForTrack(track, mode) {
-  if (mode === "spotify" && track.previewUrl) {
-    return { type: "audio", previewUrl: track.previewUrl, cover: track.cover };
+  if (mode === "spotify") {
+    if (track.previewUrl) {
+      return {
+        type: "audio",
+        previewUrl: track.previewUrl,
+        cover: track.cover,
+      };
+    }
+    // No preview on Spotify? We don't fall back to YouTube anymore to save quota.
+    console.log(`Spotify track missing preview: ${track.title}. Skipping.`);
+    return null;
   }
 
-  if (track.title) {
+  // YouTube Mode
+  if (mode === "youtube" && track.title) {
     if (!process.env.YT_API_KEY) {
+      console.warn("YouTube API Key is missing.");
+      return null;
+    }
+
+    if (!checkYtQuota()) {
       console.warn(
-        "YouTube API Key is missing. Cannot fall back for track:",
-        track.title,
+        "YouTube API Quota is still exceeded. Skipping YouTube search.",
       );
       return null;
     }
@@ -124,7 +148,12 @@ async function buildPlaybackForTrack(track, mode) {
     } catch (e) {
       const errorData = e?.response?.data;
       if (errorData?.error?.errors?.[0]?.reason === "quotaExceeded") {
-        console.error("CRITICAL: YouTube API Quota Exceeded!");
+        console.error(
+          "CRITICAL: YouTube API Quota Exceeded! Tripping circuit breaker.",
+        );
+        ytQuotaExceeded = true;
+        // set reset time to next midnight (approx 12h-24h)
+        ytQuotaResetTime = Date.now() + 1000 * 60 * 60 * 12;
       } else {
         console.warn("YouTube API error:", errorData || e.message);
       }
