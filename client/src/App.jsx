@@ -928,23 +928,27 @@ export default function App() {
               X
             </button>
           }>
-          <ul className="list">
-            {leaderboard.map((entry, idx) => (
-              <li
-                key={entry.uid}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  padding: "8px 0",
-                  borderBottom: "1px solid #323f4b",
-                }}>
-                <span>
-                  {idx + 1}. {entry.name}
-                </span>
-                <b>{entry.score} pkt</b>
-              </li>
-            ))}
-          </ul>
+          {leaderboard.length === 0 ? (
+            <p className="kbd">Ranking jest pusty lub brak połączenia...</p>
+          ) : (
+            <ul className="list">
+              {leaderboard.map((entry, idx) => (
+                <li
+                  key={entry.uid}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    padding: "8px 0",
+                    borderBottom: "1px solid #323f4b",
+                  }}>
+                  <span>
+                    {idx + 1}. {entry.name}
+                  </span>
+                  <b>{entry.score} pkt</b>
+                </li>
+              ))}
+            </ul>
+          )}
         </Section>
       )}
     </div>
