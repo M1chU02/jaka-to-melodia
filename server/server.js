@@ -90,7 +90,16 @@ async function buildPlaybackForTrack(track, mode) {
   if (mode === "spotify" && track.previewUrl) {
     return { type: "audio", previewUrl: track.previewUrl, cover: track.cover };
   }
-  if (process.env.YT_API_KEY && track.title) {
+
+  if (track.title) {
+    if (!process.env.YT_API_KEY) {
+      console.warn(
+        "YouTube API Key is missing. Cannot fall back for track:",
+        track.title,
+      );
+      return null;
+    }
+
     const q = [track.title, track.artist].filter(Boolean).join(" ");
     try {
       const r = await axios.get(
@@ -109,9 +118,16 @@ async function buildPlaybackForTrack(track, mode) {
       const item = r.data.items?.[0];
       if (item?.id?.videoId) {
         return { type: "youtube", videoId: item.id.videoId };
+      } else {
+        console.warn("No YouTube results found for:", q);
       }
     } catch (e) {
-      console.warn("YT fallback error:", e?.response?.data || e.message);
+      const errorData = e?.response?.data;
+      if (errorData?.error?.errors?.[0]?.reason === "quotaExceeded") {
+        console.error("CRITICAL: YouTube API Quota Exceeded!");
+      } else {
+        console.warn("YouTube API error:", errorData || e.message);
+      }
     }
   }
   return null;
@@ -474,15 +490,28 @@ io.on("connection", (socket) => {
       return cb && cb({ ok: true, gameOver: true });
     }
 
-    const track = room.tracks[room.roundCount];
-    if (!track) return cb && cb({ error: "No track found for this round." });
+    let playback = null;
+    let currentTrackIndex = room.roundCount;
+    let track = null;
 
-    const playback = await buildPlaybackForTrack(track, room.mode);
-    if (!playback) {
-      return cb && cb({ error: "Could not load playback for track." });
+    while (currentTrackIndex < room.tracks.length && !playback) {
+      track = room.tracks[currentTrackIndex];
+      playback = await buildPlaybackForTrack(track, room.mode);
+      if (!playback) {
+        console.warn(
+          `Skipping unplayable track: ${track.title} at index ${currentTrackIndex}`,
+        );
+        currentTrackIndex++;
+      }
     }
 
-    room.roundCount++;
+    if (!playback) {
+      return (
+        cb && cb({ error: "Could not load playback for any remaining tracks." })
+      );
+    }
+
+    room.roundCount = currentTrackIndex + 1;
 
     room.currentRound = {
       startedAt: Date.now(),
