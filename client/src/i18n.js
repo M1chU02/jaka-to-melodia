@@ -141,8 +141,12 @@ export const dictionaries = {
 };
 
 export function getInitialLang() {
-  return (
-    localStorage.getItem("lang") ||
-    (navigator.language.startsWith("pl") ? "pl" : "en")
-  );
+  try {
+    return (
+      localStorage.getItem("lang") ||
+      (navigator.language.startsWith("pl") ? "pl" : "en")
+    );
+  } catch (e) {
+    return navigator.language.startsWith("pl") ? "pl" : "en";
+  }
 }

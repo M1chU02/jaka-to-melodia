@@ -10,10 +10,16 @@ const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:4000";
 const socket = io(SERVER_URL, { transports: ["websocket"] });
 
 function useSocketEvent(event, handler) {
+  const handlerRef = useRef(handler);
   useEffect(() => {
-    socket.on(event, handler);
-    return () => socket.off(event, handler);
-  }, [event, handler]);
+    handlerRef.current = handler;
+  }, [handler]);
+
+  useEffect(() => {
+    const fn = (...args) => handlerRef.current(...args);
+    socket.on(event, fn);
+    return () => socket.off(event, fn);
+  }, [event]);
 }
 
 function Section({ title, children, toolbar }) {
@@ -37,8 +43,12 @@ function Section({ title, children, toolbar }) {
 export default function App() {
   // ===== i18n =====
   const [lang, setLang] = useState(getInitialLang());
-  const dict = dictionaries[lang];
-  useEffect(() => localStorage.setItem("lang", lang), [lang]);
+  const dict = dictionaries[lang] || dictionaries.pl;
+  useEffect(() => {
+    try {
+      localStorage.setItem("lang", lang);
+    } catch (e) {}
+  }, [lang]);
 
   // ===== Lobby / game state =====
   const [stage, setStage] = useState("welcome"); // welcome, lobby, playing
@@ -89,11 +99,19 @@ export default function App() {
 
   // ===== Volume / mute =====
   const [volume, setVolume] = useState(() => {
-    const saved = Number(localStorage.getItem("volume"));
-    return Number.isFinite(saved) ? Math.min(100, Math.max(0, saved)) : 80;
+    try {
+      const saved = Number(localStorage.getItem("volume"));
+      return Number.isFinite(saved) ? Math.min(100, Math.max(0, saved)) : 80;
+    } catch (e) {
+      return 80;
+    }
   });
   const [muted, setMuted] = useState(false);
-  useEffect(() => localStorage.setItem("volume", String(volume)), [volume]);
+  useEffect(() => {
+    try {
+      localStorage.setItem("volume", String(volume));
+    } catch (e) {}
+  }, [volume]);
 
   useEffect(() => {
     if (!audioRef.current) return;
@@ -116,23 +134,32 @@ export default function App() {
       if (stage === "lobby") setStage("playing");
 
       if (payload.currentRound && !payload.currentRound.solved) {
+        const cur = payload.currentRound;
+        const curPb = cur.playback;
+        const oldPb = round?.playback;
+
         if (
           !round ||
-          round.playback?.previewUrl !==
-            payload.currentRound.playback?.previewUrl ||
-          round.playback?.videoId !== payload.currentRound.playback?.videoId
+          curPb?.previewUrl !== oldPb?.previewUrl ||
+          curPb?.videoId !== oldPb?.videoId
         ) {
-          setRound(payload.currentRound);
+          setRound(cur);
         }
+
         // Also sync buzzer state
-        if (payload.currentRound.buzzer) {
-          setFirstBuzz({
-            id: payload.currentRound.buzzer.currentId,
-            name: payload.currentRound.buzzer.currentName,
-          });
-          setBuzzQueue(payload.currentRound.buzzer.queue || []);
+        if (cur.buzzer) {
+          if (firstBuzz?.id !== cur.buzzer.currentId) {
+            setFirstBuzz({
+              id: cur.buzzer.currentId,
+              name: cur.buzzer.currentName,
+            });
+          }
+          const newQ = cur.buzzer.queue || [];
+          if (buzzQueue.length !== newQ.length) {
+            setBuzzQueue(newQ);
+          }
         }
-      } else {
+      } else if (round) {
         setRound(null);
       }
     }
