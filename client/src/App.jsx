@@ -417,6 +417,12 @@ export default function App() {
     });
   }
 
+  function voteSkip() {
+    socket.emit("voteSkip", { code: roomCode }, (resp) => {
+      if (resp?.error) alert(resp.error);
+    });
+  }
+
   function verifyHostGuess(e) {
     if (e) e.preventDefault();
     socket.emit(
@@ -738,6 +744,15 @@ export default function App() {
                   <button className="btn" type="submit">
                     {dict.guess}
                   </button>
+                  <button
+                    className="btn ghost"
+                    type="button"
+                    onClick={voteSkip}>
+                    {dict.skipStatus(
+                      roomState?.skipVotes || 0,
+                      roomState?.totalPlayers || 0,
+                    )}
+                  </button>
                 </form>
               ) : (
                 <div className="grid">
@@ -757,6 +772,15 @@ export default function App() {
                   <div className="row">
                     <button className="btn" onClick={buzz}>
                       {dict.buzz}
+                    </button>
+                    <button
+                      className="btn ghost"
+                      type="button"
+                      onClick={voteSkip}>
+                      {dict.skipStatus(
+                        roomState?.skipVotes || 0,
+                        roomState?.totalPlayers || 0,
+                      )}
                     </button>
                   </div>
                   {isHost && (

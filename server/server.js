@@ -227,6 +227,7 @@ async function getRoom(code) {
     const room = {
       ...fireRoom,
       users: new Map(),
+      skipVotes: new Set(),
     };
     if (fireRoom.players) {
       for (const [uid, pData] of Object.entries(fireRoom.players)) {
@@ -253,6 +254,8 @@ function broadcastRoom(code) {
       name: u.name,
       score: u.score,
     })),
+    skipVotes: room.skipVotes?.size || 0,
+    totalPlayers: room.users.size,
     hasTracks: !!(room.tracks && room.tracks.length),
     gameStarted: room.answersKnown,
     gameType: room.gameType,
@@ -366,6 +369,70 @@ app.get("/api/leaderboard", async (req, res) => {
   }
 });
 
+async function triggerNextRound(code) {
+  const room = await getRoom(code);
+  if (!room) return { error: "Room does not exist." };
+
+  if (room.roundCount >= room.tracks.length || room.roundCount >= 20) {
+    // Game over
+    io.to(code).emit("gameOver", {
+      scores: [...room.users.values()].map((u) => ({
+        name: u.name,
+        score: u.score,
+      })),
+    });
+    return { ok: true, gameOver: true };
+  }
+
+  let playback = null;
+  let currentTrackIndex = room.roundCount;
+  let track = null;
+
+  while (currentTrackIndex < room.tracks.length && !playback) {
+    track = room.tracks[currentTrackIndex];
+    playback = await buildPlaybackForTrack(track, room.mode);
+    if (!playback) {
+      console.warn(
+        `Skipping unplayable track: ${track.title} at index ${currentTrackIndex}`,
+      );
+      currentTrackIndex++;
+    }
+  }
+
+  if (!playback) {
+    return { error: "Could not load playback for any remaining tracks." };
+  }
+
+  room.roundCount = currentTrackIndex + 1;
+
+  room.currentRound = {
+    startedAt: Date.now(),
+    track,
+    playback,
+    answer: { title: track.title, artist: track.artist || "" },
+    solved: false,
+    buzzer: null, // set on first buzz
+    hint: {
+      titleLen: track.title?.length || 0,
+      artistLen: track.artist?.length || 0,
+    },
+  };
+
+  room.skipVotes = new Set();
+
+  await saveRoom(code, room);
+  const payload = {
+    mode: room.mode,
+    gameType: room.gameType,
+    startedAt: room.currentRound.startedAt,
+    hint: room.currentRound.hint,
+    playback,
+  };
+
+  io.to(code).emit("roundStart", payload);
+  return { ok: true };
+}
+
 // ===== SOCKETS =====
 io.on("connection", (socket) => {
   // Create room
@@ -380,7 +447,9 @@ io.on("connection", (socket) => {
       tracks: [],
       answersKnown: false,
       gameType: "text",
+      roundCount: 0,
       currentRound: null,
+      skipVotes: new Set(),
     };
     rooms.set(code, room);
     await saveRoom(code, room);
@@ -572,6 +641,7 @@ io.on("connection", (socket) => {
     room.answersKnown = true;
     room.currentRound = null;
     room.roundCount = 0;
+    room.skipVotes = new Set();
 
     await saveRoom(code, room);
     io.to(code).emit("gameStarted", {
@@ -589,64 +659,8 @@ io.on("connection", (socket) => {
     if (room.hostId !== socket.id)
       return cb && cb({ error: "Only the host can start a round." });
 
-    if (room.roundCount >= room.tracks.length || room.roundCount >= 20) {
-      // Game over
-      io.to(code).emit("gameOver", {
-        scores: [...room.users.values()].map((u) => ({
-          name: u.name,
-          score: u.score,
-        })),
-      });
-      return cb && cb({ ok: true, gameOver: true });
-    }
-
-    let playback = null;
-    let currentTrackIndex = room.roundCount;
-    let track = null;
-
-    while (currentTrackIndex < room.tracks.length && !playback) {
-      track = room.tracks[currentTrackIndex];
-      playback = await buildPlaybackForTrack(track, room.mode);
-      if (!playback) {
-        console.warn(
-          `Skipping unplayable track: ${track.title} at index ${currentTrackIndex}`,
-        );
-        currentTrackIndex++;
-      }
-    }
-
-    if (!playback) {
-      return (
-        cb && cb({ error: "Could not load playback for any remaining tracks." })
-      );
-    }
-
-    room.roundCount = currentTrackIndex + 1;
-
-    room.currentRound = {
-      startedAt: Date.now(),
-      track,
-      playback,
-      answer: { title: track.title, artist: track.artist || "" },
-      solved: false,
-      buzzer: null, // set on first buzz
-      hint: {
-        titleLen: track.title?.length || 0,
-        artistLen: track.artist?.length || 0,
-      },
-    };
-
-    await saveRoom(code, room);
-    const payload = {
-      mode: room.mode,
-      gameType: room.gameType,
-      startedAt: room.currentRound.startedAt,
-      hint: room.currentRound.hint,
-      playback,
-    };
-
-    io.to(code).emit("roundStart", payload);
-    cb && cb({ ok: true });
+    const result = await triggerNextRound(code);
+    cb && cb(result);
   });
 
   // TEXT mode guessing
@@ -707,6 +721,36 @@ io.on("connection", (socket) => {
   socket.on("chat", ({ code, name, text }) => {
     if (!getRoom(code)) return;
     io.to(code).emit("chat", { name, text, at: Date.now() });
+  });
+
+  socket.on("voteSkip", async ({ code }, cb) => {
+    const room = await getRoom(code);
+    if (!room || !room.currentRound || room.currentRound.solved) {
+      return cb && cb({ error: "Cannot skip at this moment." });
+    }
+
+    if (!room.skipVotes) room.skipVotes = new Set();
+    room.skipVotes.add(socket.id);
+
+    const voteCount = room.skipVotes.size;
+    const totalPlayers = room.users.size;
+
+    broadcastRoom(code);
+
+    if (voteCount > totalPlayers / 2) {
+      // Trigger next round logic (simulated)
+      io.to(code).emit("chat", {
+        system: true,
+        text: "Track skipped by majority vote!",
+      });
+      // We need to call the nextRound logic. Since nextRound is an event handler,
+      // we can extract its core logic or just emit to the host if they are active,
+      // but better to just trigger it directly here.
+      // Re-using the logic from socket.on("nextRound")
+      await triggerNextRound(code);
+    }
+
+    cb && cb({ ok: true });
   });
 
   // ===== BUZZER MODE =====

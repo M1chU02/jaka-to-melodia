@@ -71,6 +71,8 @@ export const dictionaries = {
     finalScores: "Wyniki końcowe:",
     returnHome: "Powrót do menu",
     endGame: "Zakończ grę i zobacz wyniki",
+    skip: "Pomiń",
+    skipStatus: (current, total) => `Pomiń (${current}/${total})`,
   },
 
   en: {
@@ -145,6 +147,8 @@ export const dictionaries = {
     finalScores: "Final Scores:",
     returnHome: "Return Home",
     endGame: "End game and show results",
+    skip: "Skip",
+    skipStatus: (current, total) => `Skip (${current}/${total})`,
   },
 };
 
