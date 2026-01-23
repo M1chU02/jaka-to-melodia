@@ -571,7 +571,9 @@ io.on("connection", (socket) => {
         r.buzzer.queue = r.buzzer.queue.filter((p) => p.id !== socket.id);
         const after = r.buzzer?.queue.length || 0;
         if (before !== after) {
-          io.to(code).emit("queueUpdated", { queue: r.buzzer.queue });
+          io.to(code).emit("queueUpdated", {
+            queue: r.buzzer.queue.map((p) => p.name),
+          });
           changed = true;
         }
 
@@ -781,7 +783,9 @@ io.on("connection", (socket) => {
         name: r.buzzer.currentName,
         at: r.buzzer.tsFirst,
       });
-      io.to(code).emit("queueUpdated", { queue: r.buzzer.queue });
+      io.to(code).emit("queueUpdated", {
+        queue: r.buzzer.queue.map((p) => p.name),
+      });
       await saveRoom(code, room);
       return cb && cb({ ok: true, first: true });
     }
@@ -791,7 +795,9 @@ io.on("connection", (socket) => {
     const inQueue = r.buzzer.queue.some((p) => p.id === socket.id);
     if (!isCurrent && !inQueue) {
       r.buzzer.queue.push({ id: socket.id, name: player.name, ts: Date.now() });
-      io.to(code).emit("queueUpdated", { queue: r.buzzer.queue });
+      io.to(code).emit("queueUpdated", {
+        queue: r.buzzer.queue.map((p) => p.name),
+      });
       await saveRoom(code, room);
       return cb && cb({ ok: true, queued: true });
     }
@@ -821,10 +827,12 @@ io.on("connection", (socket) => {
         name: r.buzzer.currentName,
         at: r.buzzer.tsFirst,
       });
-      io.to(code).emit("queueUpdated", { queue: r.buzzer.queue });
+      io.to(code).emit("queueUpdated", {
+        queue: r.buzzer.queue.map((p) => p.name),
+      });
 
-      // ✅ WYMAGANIE: przy przejściu na kolejną osobę wznowić muzykę
-      io.to(code).emit("resumePlayback");
+      // ✅ WYMAGANIE: przy przejściu na kolejną osobę zatrzymać muzykę (osoba ta "wcisnęła" buzzer)
+      io.to(code).emit("pausePlayback");
 
       await saveRoom(code, room);
       return cb && cb({ ok: true, passed: true });
