@@ -250,7 +250,8 @@ function broadcastRoom(code) {
   const payload = {
     code: room.code,
     hostId: room.hostId,
-    players: [...room.users.values()].map((u) => ({
+    players: [...room.users.entries()].map(([sid, u]) => ({
+      sid,
       name: u.name,
       score: u.score,
     })),
@@ -663,6 +664,39 @@ io.on("connection", (socket) => {
 
     const result = await triggerNextRound(code);
     cb && cb(result);
+  });
+
+  socket.on("kickPlayer", async ({ code, targetSid }, cb) => {
+    const room = await getRoom(code);
+    if (!room) return cb && cb({ error: "Room does not exist." });
+    if (room.hostId !== socket.id)
+      return cb && cb({ error: "Only the host can kick players." });
+
+    const targetUser = room.users.get(targetSid);
+    if (!targetUser) return cb && cb({ error: "Target player not found." });
+
+    if (targetSid === socket.id)
+      return cb && cb({ error: "You cannot kick yourself." });
+
+    // Notify the target
+    io.to(targetSid).emit("kicked", { message: "You have been kicked." });
+
+    // Force leave room
+    const targetSocket = io.sockets.sockets.get(targetSid);
+    if (targetSocket) {
+      targetSocket.leave(code);
+    }
+
+    room.users.delete(targetSid);
+    await saveRoom(code, room);
+
+    io.to(code).emit("chat", {
+      system: true,
+      text: `${targetUser.name} was kicked from the room`,
+    });
+
+    broadcastRoom(code);
+    cb && cb({ ok: true });
   });
 
   // TEXT mode guessing

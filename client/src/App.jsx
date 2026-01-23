@@ -230,6 +230,10 @@ export default function App() {
   });
 
   useSocketEvent("chat", (msg) => setChatLog((prev) => [...prev, msg]));
+  useSocketEvent("kicked", (payload) => {
+    alert(payload.message || dict.kickedMessage);
+    goHome();
+  });
   useSocketEvent("buzzed", (payload) => setFirstBuzz(payload));
   useSocketEvent("queueUpdated", (payload) =>
     setBuzzQueue(payload.queue || []),
@@ -452,6 +456,13 @@ export default function App() {
     });
   }
 
+  function kickPlayer(targetSid) {
+    if (!roomCode) return;
+    socket.emit("kickPlayer", { code: roomCode, targetSid }, (resp) => {
+      if (resp?.error) alert(resp.error);
+    });
+  }
+
   // ===== Options for CustomSelects =====
   const langOptions = [
     { value: "pl", label: dict.polish },
@@ -562,8 +573,24 @@ export default function App() {
               <h3>{dict.players}</h3>
               <ul className="list">
                 {roomState?.players?.map((p) => (
-                  <li key={p.name}>
-                    {p.name} — <b>{p.score}</b> pkt
+                  <li
+                    key={p.sid || p.name}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}>
+                    <span>
+                      {p.name} — <b>{p.score}</b> pkt
+                    </span>
+                    {isHost && p.sid !== socket.id && (
+                      <button
+                        className="btn ghost"
+                        style={{ padding: "2px 8px", fontSize: "0.8em" }}
+                        onClick={() => kickPlayer(p.sid)}>
+                        {dict.kick}
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
