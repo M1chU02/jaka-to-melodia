@@ -784,16 +784,24 @@ io.on("connection", (socket) => {
     broadcastRoom(code);
 
     if (voteCount > totalPlayers / 2) {
-      // Trigger next round logic (simulated)
       io.to(code).emit("chat", {
         system: true,
         text: "Track skipped by majority vote!",
       });
-      // We need to call the nextRound logic. Since nextRound is an event handler,
-      // we can extract its core logic or just emit to the host if they are active,
-      // but better to just trigger it directly here.
-      // Re-using the logic from socket.on("nextRound")
-      await triggerNextRound(code);
+      const { title, artist } = room.currentRound.answer;
+      room.currentRound.solved = true;
+      await saveRoom(code, room);
+      io.to(code).emit("roundEnd", {
+        winner: null,
+        answer: { title, artist },
+        elapsedMs: Date.now() - room.currentRound.startedAt,
+        scores: [...room.users.values()].map((u) => ({
+          name: u.name,
+          score: u.score,
+        })),
+        skipped: true,
+      });
+      broadcastRoom(code);
     }
 
     cb && cb({ ok: true });
@@ -1008,6 +1016,34 @@ io.on("connection", (socket) => {
       broadcastRoom(code);
       cb && cb({ ok: true });
     }
+  });
+
+  socket.on("pauseRound", async ({ code }, cb) => {
+    const room = await getRoom(code);
+    if (!room || !room.currentRound)
+      return cb && cb({ error: "Round is not active." });
+    if (room.hostId !== socket.id)
+      return cb && cb({ error: "Only the host can pause the round." });
+
+    room.currentRound.paused = true;
+    io.to(code).emit("pausePlayback");
+    await saveRoom(code, room);
+    broadcastRoom(code);
+    cb && cb({ ok: true });
+  });
+
+  socket.on("resumeRound", async ({ code }, cb) => {
+    const room = await getRoom(code);
+    if (!room || !room.currentRound)
+      return cb && cb({ error: "Round is not active." });
+    if (room.hostId !== socket.id)
+      return cb && cb({ error: "Only the host can resume the round." });
+
+    room.currentRound.paused = false;
+    io.to(code).emit("resumePlayback");
+    await saveRoom(code, room);
+    broadcastRoom(code);
+    cb && cb({ ok: true });
   });
 
   socket.on("disconnect", async () => {

@@ -76,6 +76,8 @@ export const dictionaries = {
     skipStatus: (current, total) => `Pomiń (${current}/${total})`,
     kick: "Wyrzuć",
     kickedMessage: "Zostałeś wyrzucony z pokoju",
+    pause: "Pause",
+    resume: "Resume",
   },
 
   en: {
@@ -155,6 +157,8 @@ export const dictionaries = {
     skipStatus: (current, total) => `Skip (${current}/${total})`,
     kick: "Kick",
     kickedMessage: "You have been kicked from the room",
+    pause: "Pause",
+    resume: "Resume",
   },
 };
 

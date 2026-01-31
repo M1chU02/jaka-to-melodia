@@ -446,6 +446,18 @@ export default function App() {
     });
   }
 
+  function pauseRound() {
+    socket.emit("pauseRound", { code: roomCode }, (resp) => {
+      if (resp?.error) alert(resp.error);
+    });
+  }
+
+  function resumeRound() {
+    socket.emit("resumeRound", { code: roomCode }, (resp) => {
+      if (resp?.error) alert(resp.error);
+    });
+  }
+
   function verifyHostGuess(e) {
     if (e) e.preventDefault();
     socket.emit(
@@ -795,6 +807,22 @@ export default function App() {
                       }}
                     />
                     <div className="kbd">{dict.hiddenYT}</div>
+                  </div>
+                )}
+
+                {isHost && (
+                  <div className="row" style={{ marginTop: 12 }}>
+                    <button
+                      className="btn secondary"
+                      onClick={
+                        roomState?.currentRound?.paused
+                          ? resumeRound
+                          : pauseRound
+                      }>
+                      {roomState?.currentRound?.paused
+                        ? dict.resume
+                        : dict.pause}
+                    </button>
                   </div>
                 )}
               </div>
