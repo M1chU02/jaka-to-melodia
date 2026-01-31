@@ -266,6 +266,7 @@ function broadcastRoom(code) {
           startedAt: room.currentRound.startedAt,
           hint: room.currentRound.hint,
           playback: room.currentRound.playback,
+          paused: room.currentRound.paused || false,
           solved: room.currentRound.solved,
           buzzer: room.currentRound.buzzer
             ? {
@@ -420,6 +421,7 @@ async function triggerNextRound(code) {
     playback,
     answer: { title: track.title, artist: track.artist || "" },
     solved: false,
+    paused: false,
     buzzer: null, // set on first buzz
     hint: {
       titleLen: track.title?.length || 0,
@@ -820,6 +822,7 @@ io.on("connection", (socket) => {
       };
 
       io.to(code).emit("pausePlayback"); // <-- pauza przy pierwszym buzz
+      r.paused = true;
       io.to(code).emit("buzzed", {
         id: r.buzzer.currentId,
         name: r.buzzer.currentName,
@@ -875,6 +878,7 @@ io.on("connection", (socket) => {
 
       // ✅ WYMAGANIE: przy przejściu na kolejną osobę zatrzymać muzykę (osoba ta "wcisnęła" buzzer)
       io.to(code).emit("pausePlayback");
+      r.paused = true;
 
       await saveRoom(code, room);
       return cb && cb({ ok: true, passed: true });
@@ -882,6 +886,7 @@ io.on("connection", (socket) => {
       r.buzzer = null;
       io.to(code).emit("buzzCleared", {});
       io.to(code).emit("resumePlayback");
+      r.paused = false;
       await saveRoom(code, room);
       return cb && cb({ ok: true, cleared: true });
     }

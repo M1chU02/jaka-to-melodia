@@ -150,6 +150,20 @@ export default function App() {
           setRound(cur);
         }
 
+        // Sync local playback with current paused state
+        if (cur.paused) {
+          if (audioRef.current) audioRef.current.pause();
+          const player = ytRef.current?.internalPlayer || ytRef.current;
+          if (player?.pauseVideo) player.pauseVideo();
+        } else {
+          // If not paused, ensure it's playing (if we have a round)
+          if (audioRef.current && audioRef.current.paused) {
+            audioRef.current.play().catch(() => {});
+          }
+          const player = ytRef.current?.internalPlayer || ytRef.current;
+          if (player?.playVideo) player.playVideo();
+        }
+
         // Also sync buzzer state
         if (cur.buzzer) {
           if (firstBuzz?.id !== cur.buzzer.currentId) {
@@ -192,7 +206,11 @@ export default function App() {
     setHostArtist("");
     setHostTitle("");
     setVerifyStatus(null);
-    if (payload.playback?.type === "audio" && audioRef.current) {
+    if (
+      payload.playback?.type === "audio" &&
+      audioRef.current &&
+      !payload.paused
+    ) {
       setTimeout(() => {
         audioRef.current.currentTime = 0;
         audioRef.current.volume = muted ? 0 : volume / 100;
@@ -766,12 +784,14 @@ export default function App() {
                       opts={{
                         width: "0",
                         height: "0",
-                        playerVars: { autoplay: 1 },
+                        playerVars: {},
                       }}
                       onReady={(e) => {
                         ytRef.current = e.target;
                         e.target.setVolume(muted ? 0 : volume);
-                        e.target.playVideo();
+                        if (!round?.paused) {
+                          e.target.playVideo();
+                        }
                       }}
                     />
                     <div className="kbd">{dict.hiddenYT}</div>
