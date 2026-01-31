@@ -285,7 +285,7 @@ function broadcastRoom(code) {
 // ===== REST: Parse + fetch playlists =====
 app.post("/api/parse-playlist", async (req, res) => {
   try {
-    const { url } = req.body;
+    const { url, songCount = 20 } = req.body;
     if (!url) return res.status(400).json({ error: "Missing playlist URL." });
 
     if (parseSpotifyPlaylistId(url)) {
@@ -307,8 +307,8 @@ app.post("/api/parse-playlist", async (req, res) => {
       const allTracks = data.tracks || [];
       const shuffled = [...allTracks].sort(() => Math.random() - 0.5);
 
-      // We take a larger batch to ensure we find 20 playable tracks
-      const batchSize = Math.min(shuffled.length, 40);
+      // We take a larger batch to ensure we find enough playable tracks
+      const batchSize = Math.min(shuffled.length, songCount * 2);
       const batch = shuffled.slice(0, batchSize);
 
       console.log(
@@ -323,10 +323,10 @@ app.post("/api/parse-playlist", async (req, res) => {
         }),
       );
 
-      // Filter for playable (has videoId or previewUrl) and take first 20
+      // Filter for playable (has videoId or previewUrl) and take requested count
       const enrichedTracks = enrichedBatch
         .filter((t) => t.videoId || t.previewUrl)
-        .slice(0, 20);
+        .slice(0, songCount);
 
       return res.json({
         ...data,
@@ -342,10 +342,18 @@ app.post("/api/parse-playlist", async (req, res) => {
           .status(400)
           .json({ error: "Missing YT_API_KEY for YouTube Data API." });
       }
-      const data = await fetchYouTubePlaylist({
+      let data = await fetchYouTubePlaylist({
         url,
         apiKey: process.env.YT_API_KEY,
       });
+
+      // Shuffle and limit tracks for YouTube as well
+      if (data.tracks && data.tracks.length > songCount) {
+        const shuffled = data.tracks.sort(() => Math.random() - 0.5);
+        data.tracks = shuffled.slice(0, songCount);
+        data.total = data.tracks.length;
+      }
+
       return res.json(data);
     }
 
@@ -374,7 +382,7 @@ async function triggerNextRound(code) {
   const room = await getRoom(code);
   if (!room) return { error: "Room does not exist." };
 
-  if (room.roundCount >= room.tracks.length || room.roundCount >= 20) {
+  if (room.roundCount >= room.tracks.length) {
     // Game over
     io.to(code).emit("gameOver", {
       scores: [...room.users.values()].map((u) => ({
@@ -637,9 +645,9 @@ io.on("connection", (socket) => {
     room.mode = mode; // spotify | youtube
     room.gameType = gameType || "text"; // text | buzzer
 
-    // Shuffle and pick 20
+    // Shuffle and pick
     const shuffled = [...tracks].sort(() => Math.random() - 0.5);
-    room.tracks = shuffled.slice(0, 20);
+    room.tracks = shuffled;
 
     room.answersKnown = true;
     room.currentRound = null;

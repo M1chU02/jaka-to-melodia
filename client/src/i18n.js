@@ -29,6 +29,7 @@ export const dictionaries = {
     gameMode: "Tryb gry",
     textMode: "Tekstowy (zgaduj na czacie gry)",
     voiceMode: "Buzzer (odpowiedzi na komunikatorze głosowym)",
+    songCount: "Liczba piosenek",
 
     startGame: "Rozpocznij grę",
     startRound: "Rozpocznij rundę",
@@ -107,6 +108,7 @@ export const dictionaries = {
     gameMode: "Game mode",
     textMode: "Text (type your guess)",
     voiceMode: "Buzzer (answer on voice chat)",
+    songCount: "Number of songs",
 
     startGame: "Start game",
     startRound: "Start round",

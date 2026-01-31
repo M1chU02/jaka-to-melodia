@@ -72,6 +72,7 @@ export default function App() {
 
   // ===== Playlist (host) =====
   const [playlistUrl, setPlaylistUrl] = useState("");
+  const [songCount, setSongCount] = useState(20);
   const [parsed, setParsed] = useState(null);
   const [loadingPlaylist, setLoadingPlaylist] = useState(false);
 
@@ -331,7 +332,7 @@ export default function App() {
       const r = await fetch(`${SERVER_URL}/api/parse-playlist`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: playlistUrl }),
+        body: JSON.stringify({ url: playlistUrl, songCount }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Error loading playlist.");
@@ -476,6 +477,13 @@ export default function App() {
     value: p.name,
     label: p.name,
   }));
+  const songCountOptions = [
+    { value: 5, label: "5" },
+    { value: 10, label: "10" },
+    { value: 15, label: "15" },
+    { value: 20, label: "20" },
+    { value: 25, label: "25" },
+  ];
 
   async function fetchLeaderboard() {
     try {
@@ -681,6 +689,15 @@ export default function App() {
               />
             </div>
 
+            <div className="row">
+              <span className="kbd">{dict.songCount}:</span>
+              <CustomSelect
+                options={songCountOptions}
+                value={songCount}
+                onChange={setSongCount}
+              />
+            </div>
+
             {parsed ? (
               <div className="row">
                 <button className="btn" onClick={startGame}>
@@ -697,7 +714,11 @@ export default function App() {
       {/* Round */}
       {stage === "playing" && (
         <Section
-          title={`${dict.round} ${roomState?.roundCount || 0}/20`}
+          title={`${dict.round} ${roomState?.roundCount || 0}/${
+            roomState?.hasTracks
+              ? roomState.totalPlayable || roomState.tracksCount || 20
+              : 20
+          }`}
           toolbar={
             <div className="row">
               <button className="muteBtn" onClick={() => setMuted((m) => !m)}>
