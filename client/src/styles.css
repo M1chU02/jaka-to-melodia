@@ -21,9 +21,18 @@ body,
 }
 body {
   margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu,
-    Cantarell, Noto Sans, sans-serif;
-  background: radial-gradient(
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Ubuntu,
+    Cantarell,
+    Noto Sans,
+    sans-serif;
+  background:
+    radial-gradient(
       1200px 800px at 10% -10%,
       rgba(124, 58, 237, 0.25),
       transparent 55%
@@ -39,14 +48,31 @@ body {
 
 a,
 button {
-  transition: transform 0.06s ease, filter 0.15s ease, background 0.2s ease,
-    color 0.2s ease, border-color 0.2s ease;
+  transition:
+    transform 0.06s ease,
+    filter 0.15s ease,
+    background 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .container {
-  max-width: 1100px;
-  margin: 32px auto;
-  padding: 0 16px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 16px;
+  width: 100%;
+}
+@media (min-width: 1600px) {
+  .container {
+    max-width: 1500px;
+    padding: 48px 24px;
+  }
+}
+@media (min-width: 2500px) {
+  .container {
+    max-width: 2200px;
+    padding: 64px 32px;
+  }
 }
 .header {
   display: flex;
@@ -58,13 +84,14 @@ button {
 .logoBtn {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   background: transparent;
   border: 0;
   color: var(--text);
-  padding: 6px 8px;
+  padding: 8px 12px;
   border-radius: 14px;
   cursor: pointer;
+  text-decoration: none;
 }
 .logoBtn:hover {
   filter: brightness(1.1);
@@ -75,8 +102,13 @@ button {
   align-items: center;
   gap: 12px;
   margin: 0;
-  font-size: 40px;
+  font-size: clamp(24px, 5vw, 40px);
   letter-spacing: 0.2px;
+}
+@media (min-width: 2500px) {
+  .h1 {
+    font-size: 64px;
+  }
 }
 .subtitle {
   margin: 0 0 16px 0;
@@ -104,9 +136,26 @@ button {
   align-items: center;
   flex-wrap: wrap;
 }
+.row.stack-mobile {
+  flex-direction: row;
+}
+@media (max-width: 768px) {
+  .row.stack-mobile {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .row.stack-mobile > * {
+    width: 100%;
+  }
+}
 .grid {
   display: grid;
   gap: 16px;
+}
+@media (min-width: 2500px) {
+  .grid {
+    gap: 32px;
+  }
 }
 .kbd {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -135,7 +184,19 @@ textarea {
   border-radius: 12px;
   padding: 10px 12px;
   outline: none;
-  transition: border 0.2s, box-shadow 0.2s, background 0.2s;
+  transition:
+    border 0.2s,
+    box-shadow 0.2s,
+    background 0.2s;
+  width: auto;
+  max-width: 100%;
+}
+@media (max-width: 600px) {
+  .input,
+  .select,
+  textarea {
+    width: 100%;
+  }
 }
 .input:focus,
 .select:focus,
@@ -184,6 +245,14 @@ textarea:focus {
   background: linear-gradient(180deg, var(--accent), #5b21b6);
   color: white;
   box-shadow: 0 12px 28px rgba(124, 58, 237, 0.35);
+  font-size: 16px;
+}
+@media (min-width: 2500px) {
+  .btn {
+    padding: 16px 24px;
+    font-size: 24px;
+    border-radius: 20px;
+  }
 }
 .btn:hover {
   filter: brightness(1.07);
@@ -230,6 +299,19 @@ textarea:focus {
   border-radius: 12px;
   padding: 10px;
 }
+@media (min-width: 1600px) {
+  .chatbox {
+    height: 350px;
+    font-size: 1.1em;
+  }
+}
+@media (min-width: 2500px) {
+  .chatbox {
+    height: 500px;
+    font-size: 1.4em;
+    padding: 20px;
+  }
+}
 
 .audio {
   width: 100%;
@@ -267,6 +349,13 @@ textarea:focus {
   position: relative;
   display: inline-block;
   width: 220px;
+  max-width: 100%;
+}
+@media (max-width: 600px) {
+  .custom-select {
+    display: block;
+    width: 100%;
+  }
 }
 
 .custom-select-btn {
@@ -282,6 +371,13 @@ textarea:focus {
   justify-content: space-between;
   align-items: center;
   transition: all 0.2s ease;
+}
+@media (min-width: 2500px) {
+  .custom-select-btn {
+    font-size: 22px;
+    padding: 12px 18px;
+    border-radius: 20px;
+  }
 }
 
 .custom-select-btn:hover {

@@ -26,12 +26,8 @@ function Section({ title, children, toolbar }) {
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 8,
-        }}>
+        className="row"
+        style={{ justifyContent: "space-between", marginBottom: 8 }}>
         <h2 style={{ margin: 0 }}>{title}</h2>
         {toolbar}
       </div>
@@ -534,7 +530,7 @@ export default function App() {
           <span style={{ fontSize: 28 }}>🎵</span>
           <h1 className="h1">{dict.title}</h1>
         </button>
-        <div className="row">
+        <div className="row stack-mobile">
           <span className="kbd">{dict.language}:</span>
           <CustomSelect
             options={langOptions}
@@ -551,7 +547,7 @@ export default function App() {
       {/* Welcome */}
       {stage === "welcome" && (
         <Section title={dict.enterGame}>
-          <div className="row">
+          <div className="row stack-mobile">
             <input
               className="input"
               placeholder={dict.yourName}
@@ -606,7 +602,9 @@ export default function App() {
       {/* Lobby */}
       {stage !== "welcome" && (
         <Section title={`${dict.room}: ${roomCode}`}>
-          <div className="row" style={{ alignItems: "flex-start" }}>
+          <div
+            className="row stack-mobile"
+            style={{ alignItems: "flex-start" }}>
             <div style={{ flex: 1, minWidth: 260 }}>
               <h3>{dict.players}</h3>
               <ul className="list">
@@ -634,7 +632,7 @@ export default function App() {
               </ul>
 
               {/* Edycja własnej nazwy */}
-              <div className="row" style={{ marginTop: 8 }}>
+              <div className="row stack-mobile" style={{ marginTop: 8 }}>
                 <input
                   className="input"
                   style={{ minWidth: 180 }}
@@ -729,7 +727,7 @@ export default function App() {
             </div>
 
             {parsed ? (
-              <div className="row">
+              <div className="row stack-mobile">
                 <button className="btn" onClick={startGame}>
                   {dict.startGame}
                 </button>
@@ -828,7 +826,7 @@ export default function App() {
               </div>
 
               {gameType === "text" ? (
-                <form onSubmit={sendGuess} className="row">
+                <form onSubmit={sendGuess} className="row stack-mobile">
                   <input
                     className="input"
                     value={guess}
@@ -837,18 +835,20 @@ export default function App() {
                     style={{ flex: 1 }}
                     autoComplete="off"
                   />
-                  <button className="btn" type="submit">
-                    {dict.guess}
-                  </button>
-                  <button
-                    className="btn ghost"
-                    type="button"
-                    onClick={voteSkip}>
-                    {dict.skipStatus(
-                      roomState?.skipVotes || 0,
-                      roomState?.totalPlayers || 0,
-                    )}
-                  </button>
+                  <div className="row">
+                    <button className="btn" type="submit">
+                      {dict.guess}
+                    </button>
+                    <button
+                      className="btn ghost"
+                      type="button"
+                      onClick={voteSkip}>
+                      {dict.skipStatus(
+                        roomState?.skipVotes || 0,
+                        roomState?.totalPlayers || 0,
+                      )}
+                    </button>
+                  </div>
                 </form>
               ) : (
                 <div className="grid">
@@ -865,7 +865,7 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                  <div className="row">
+                  <div className="row stack-mobile">
                     <button className="btn" onClick={buzz}>
                       {dict.buzz}
                     </button>
@@ -880,39 +880,43 @@ export default function App() {
                     </button>
                   </div>
                   {isHost && (
-                    <div className="row" style={{ alignItems: "center" }}>
+                    <div
+                      className="row stack-mobile"
+                      style={{ alignItems: "center" }}>
                       <span className="kbd">{dict.awardPoints}:</span>
-                      <CustomSelect
-                        options={playerOptions}
-                        value={awardPlayer}
-                        onChange={setAwardPlayer}
-                      />
-                      <button
-                        className="btn"
-                        onClick={() => awardPoints(awardPlayer, 5)}>
-                        +5
-                      </button>
-                      <button
-                        className="btn"
-                        onClick={() => awardPoints(awardPlayer, 10)}>
-                        +10
-                      </button>
-                      <button
-                        className="btn"
-                        onClick={() => deductPoints(awardPlayer, 5)}>
-                        -5
-                      </button>
-                      <button
-                        className="btn"
-                        onClick={() => deductPoints(awardPlayer, 10)}>
-                        -10
-                      </button>
-                      <button className="btn" onClick={passBuzzer}>
-                        {dict.passToNext}
-                      </button>
-                      <button className="btn ghost" onClick={endRoundManual}>
-                        {dict.endRound}
-                      </button>
+                      <div className="row">
+                        <CustomSelect
+                          options={playerOptions}
+                          value={awardPlayer}
+                          onChange={setAwardPlayer}
+                        />
+                        <button
+                          className="btn"
+                          onClick={() => awardPoints(awardPlayer, 5)}>
+                          +5
+                        </button>
+                        <button
+                          className="btn"
+                          onClick={() => awardPoints(awardPlayer, 10)}>
+                          +10
+                        </button>
+                        <button
+                          className="btn"
+                          onClick={() => deductPoints(awardPlayer, 5)}>
+                          -5
+                        </button>
+                        <button
+                          className="btn"
+                          onClick={() => deductPoints(awardPlayer, 10)}>
+                          -10
+                        </button>
+                        <button className="btn" onClick={passBuzzer}>
+                          {dict.passToNext}
+                        </button>
+                        <button className="btn ghost" onClick={endRoundManual}>
+                          {dict.endRound}
+                        </button>
+                      </div>
                     </div>
                   )}
 
