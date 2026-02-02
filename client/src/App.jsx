@@ -342,7 +342,8 @@ export default function App() {
   }
 
   async function parsePlaylist(overrideUrl = null) {
-    const urlToUse = overrideUrl || playlistUrl;
+    const urlToUse =
+      typeof overrideUrl === "string" ? overrideUrl : playlistUrl;
     if (!urlToUse) return;
     try {
       setLoadingPlaylist(true);
