@@ -1,39 +1,34 @@
 import admin from "firebase-admin";
+import crypto from "crypto";
+
+// Helper to create a stable ID for a user-playlist combination
+function getPlaylistDocId(uid, url) {
+  const hash = crypto.createHash("md5").update(url).digest("hex");
+  return `${uid}_${hash}`;
+}
 
 export async function savePlaylistToHistory(uid, { url, name, source }) {
   if (!admin.apps.length) return;
-  console.log(`Saving history for ${uid}: ${name} (${url})`);
+
+  console.log(`Saving playlist to history: ${name} for user ${uid}`);
   const db = admin.firestore();
-  const userRef = db.collection("playlist_history").doc(uid);
+  const docId = getPlaylistDocId(uid, url);
+  const playRef = db.collection("user_playlists").doc(docId);
 
   try {
-    await db.runTransaction(async (t) => {
-      const doc = await t.get(userRef);
-      let history = [];
-      if (doc.exists) {
-        history = doc.data().history || [];
-      }
-
-      // Remove current if exists (to move to top)
-      history = history.filter((item) => item.url !== url);
-
-      // Add to beginning
-      history.unshift({
+    await playRef.set(
+      {
+        uid,
         url,
         name,
         source,
         lastUsed: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-      // Limit to 10 items
-      if (history.length > 10) {
-        history = history.slice(0, 10);
-      }
-
-      t.set(userRef, { history }, { merge: true });
-    });
+      },
+      { merge: true },
+    );
+    console.log(`Successfully saved playlist document: ${docId}`);
   } catch (e) {
-    console.error("Failed to save playlist history:", e);
+    console.error("Failed to save playlist to history:", e);
   }
 }
 
@@ -41,14 +36,28 @@ export async function getPlaylistHistory(uid) {
   if (!admin.apps.length) return [];
   const db = admin.firestore();
   try {
-    const doc = await db.collection("playlist_history").doc(uid).get();
-    if (doc.exists) {
-      const history = doc.data().history || [];
-      console.log(`Fetched ${history.length} history items for ${uid}`);
-      return history;
-    }
-    console.log(`No history document found for ${uid}`);
-    return [];
+    const snapshot = await db
+      .collection("user_playlists")
+      .where("uid", "==", uid)
+      .limit(50)
+      .get();
+
+    const history = snapshot.docs.map((doc) => ({
+      ...doc.data(),
+    }));
+
+    // Sort in memory to avoid index requirement
+    history.sort((a, b) => {
+      const tsA = a.lastUsed?.toMillis?.() || a.lastUsed || 0;
+      const tsB = b.lastUsed?.toMillis?.() || b.lastUsed || 0;
+      return tsB - tsA;
+    });
+
+    const limitedHistory = history.slice(0, 10);
+    console.log(
+      `Fetched ${limitedHistory.length} playlist items for user ${uid}`,
+    );
+    return limitedHistory;
   } catch (e) {
     console.error("Failed to fetch playlist history:", e);
     return [];

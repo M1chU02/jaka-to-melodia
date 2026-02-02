@@ -53,7 +53,7 @@ export async function fetchSpotifyPlaylistTracks({
       params: { fields: "name" },
     },
   );
-  const playlistName = playlistResp.data.name;
+  const playlistName = playlistResp.data.name || "Spotify Playlist";
 
   // Fetch in pages
   let items = [];

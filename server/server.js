@@ -317,12 +317,19 @@ app.post("/api/parse-playlist", async (req, res) => {
 
       let updatedHistory = null;
       if (userId) {
-        await savePlaylistToHistory(userId, {
-          url,
-          name: data.playlistName,
-          source: "spotify",
-        });
-        updatedHistory = await getPlaylistHistory(userId);
+        try {
+          await savePlaylistToHistory(userId, {
+            url,
+            name: data.playlistName,
+            source: "spotify",
+          });
+          updatedHistory = await getPlaylistHistory(userId);
+          console.log(
+            `History updated for user ${userId}, items: ${updatedHistory?.length}`,
+          );
+        } catch (histErr) {
+          console.error("Failed to update history in parse-playlist:", histErr);
+        }
       }
 
       // Shuffle tracks
@@ -368,12 +375,19 @@ app.post("/api/parse-playlist", async (req, res) => {
 
       let updatedHistory = null;
       if (userId) {
-        await savePlaylistToHistory(userId, {
-          url,
-          name: data.playlistName,
-          source: "youtube",
-        });
-        updatedHistory = await getPlaylistHistory(userId);
+        try {
+          await savePlaylistToHistory(userId, {
+            url,
+            name: data.playlistName,
+            source: "youtube",
+          });
+          updatedHistory = await getPlaylistHistory(userId);
+          console.log(
+            `History updated for user ${userId}, items: ${updatedHistory?.length}`,
+          );
+        } catch (histErr) {
+          console.error("Failed to update history in parse-playlist:", histErr);
+        }
       }
 
       // Shuffle and take requested count
