@@ -24,7 +24,7 @@ function useSocketEvent(event, handler) {
 
 function Section({ title, children, toolbar }) {
   return (
-    <div className="card" style={{ marginBottom: 16 }}>
+    <div className="card" style={{ marginBottom: 12 }}>
       <div
         className="row"
         style={{ justifyContent: "space-between", marginBottom: 8 }}>

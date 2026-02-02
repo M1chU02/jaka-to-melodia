@@ -59,19 +59,19 @@ button {
 .container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 32px 16px;
+  padding: 16px;
   width: 100%;
 }
 @media (min-width: 1600px) {
   .container {
     max-width: 1500px;
-    padding: 48px 24px;
+    padding: 24px;
   }
 }
 @media (min-width: 2500px) {
   .container {
-    max-width: 2200px;
-    padding: 64px 32px;
+    max-width: 1800px;
+    padding: 32px;
   }
 }
 .header {
@@ -79,7 +79,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 .logoBtn {
   display: inline-flex;
@@ -102,17 +102,18 @@ button {
   align-items: center;
   gap: 12px;
   margin: 0;
-  font-size: clamp(24px, 5vw, 40px);
+  font-size: clamp(24px, 4vw, 36px);
   letter-spacing: 0.2px;
 }
 @media (min-width: 2500px) {
   .h1 {
-    font-size: 64px;
+    font-size: 48px;
   }
 }
 .subtitle {
-  margin: 0 0 16px 0;
+  margin: 0 0 8px 0;
   color: var(--muted);
+  font-size: 0.9em;
 }
 
 .card {
@@ -123,7 +124,7 @@ button {
   );
   border: 1px solid var(--border);
   border-radius: 18px;
-  padding: 18px;
+  padding: 14px;
   box-shadow: var(--shadow);
 }
 .card:hover {
@@ -150,11 +151,11 @@ button {
 }
 .grid {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 @media (min-width: 2500px) {
   .grid {
-    gap: 32px;
+    gap: 20px;
   }
 }
 .kbd {
@@ -238,20 +239,20 @@ textarea:focus {
 
 .btn {
   border: 1px solid transparent;
-  border-radius: 12px;
-  padding: 10px 14px;
+  border-radius: 10px;
+  padding: 8px 12px;
   font-weight: 700;
   cursor: pointer;
   background: linear-gradient(180deg, var(--accent), #5b21b6);
   color: white;
-  box-shadow: 0 12px 28px rgba(124, 58, 237, 0.35);
-  font-size: 16px;
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.3);
+  font-size: 15px;
 }
 @media (min-width: 2500px) {
   .btn {
-    padding: 16px 24px;
-    font-size: 24px;
-    border-radius: 20px;
+    padding: 12px 20px;
+    font-size: 20px;
+    border-radius: 16px;
   }
 }
 .btn:hover {
@@ -294,22 +295,22 @@ textarea:focus {
 .chatbox {
   border: 1px solid var(--border);
   background: #0b1220;
-  height: 200px;
+  height: 250px;
   overflow: auto;
   border-radius: 12px;
   padding: 10px;
 }
 @media (min-width: 1600px) {
   .chatbox {
-    height: 350px;
-    font-size: 1.1em;
+    height: 300px;
+    font-size: 1.05em;
   }
 }
 @media (min-width: 2500px) {
   .chatbox {
-    height: 500px;
-    font-size: 1.4em;
-    padding: 20px;
+    height: 400px;
+    font-size: 1.25em;
+    padding: 15px;
   }
 }
 
@@ -360,12 +361,12 @@ textarea:focus {
 
 .custom-select-btn {
   width: 100%;
-  padding: 8px 12px;
+  padding: 6px 10px;
   background: #1f2937;
   color: #e5e7eb;
   border: 1px solid #374151;
-  border-radius: 12px;
-  font-size: 14px;
+  border-radius: 10px;
+  font-size: 13px;
   cursor: pointer;
   display: flex;
   justify-content: space-between;
@@ -374,9 +375,9 @@ textarea:focus {
 }
 @media (min-width: 2500px) {
   .custom-select-btn {
-    font-size: 22px;
-    padding: 12px 18px;
-    border-radius: 20px;
+    font-size: 18px;
+    padding: 10px 14px;
+    border-radius: 15px;
   }
 }
 
