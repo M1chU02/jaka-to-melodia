@@ -2,6 +2,7 @@ import admin from "firebase-admin";
 
 export async function savePlaylistToHistory(uid, { url, name, source }) {
   if (!admin.apps.length) return;
+  console.log(`Saving history for ${uid}: ${name} (${url})`);
   const db = admin.firestore();
   const userRef = db.collection("playlist_history").doc(uid);
 
@@ -42,8 +43,11 @@ export async function getPlaylistHistory(uid) {
   try {
     const doc = await db.collection("playlist_history").doc(uid).get();
     if (doc.exists) {
-      return doc.data().history || [];
+      const history = doc.data().history || [];
+      console.log(`Fetched ${history.length} history items for ${uid}`);
+      return history;
     }
+    console.log(`No history document found for ${uid}`);
     return [];
   } catch (e) {
     console.error("Failed to fetch playlist history:", e);

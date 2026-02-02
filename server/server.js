@@ -315,12 +315,14 @@ app.post("/api/parse-playlist", async (req, res) => {
         clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
       });
 
+      let updatedHistory = null;
       if (userId) {
         await savePlaylistToHistory(userId, {
           url,
           name: data.playlistName,
           source: "spotify",
         });
+        updatedHistory = await getPlaylistHistory(userId);
       }
 
       // Shuffle tracks
@@ -349,6 +351,7 @@ app.post("/api/parse-playlist", async (req, res) => {
         total: enrichedTracks.length,
         playable: enrichedTracks.length,
         tracks: enrichedTracks,
+        updatedHistory,
       });
     }
 
@@ -363,12 +366,14 @@ app.post("/api/parse-playlist", async (req, res) => {
         apiKey: process.env.YT_API_KEY,
       });
 
+      let updatedHistory = null;
       if (userId) {
         await savePlaylistToHistory(userId, {
           url,
           name: data.playlistName,
           source: "youtube",
         });
+        updatedHistory = await getPlaylistHistory(userId);
       }
 
       // Shuffle and take requested count
@@ -376,7 +381,7 @@ app.post("/api/parse-playlist", async (req, res) => {
       data.tracks = data.tracks.slice(0, songCount);
       data.total = data.tracks.length;
 
-      return res.json(data);
+      return res.json({ ...data, updatedHistory });
     }
 
     return res.status(400).json({

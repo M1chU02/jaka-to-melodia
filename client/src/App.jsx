@@ -356,7 +356,11 @@ export default function App() {
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Error loading playlist.");
       setParsed(data);
-      if (token) fetchPlaylistHistory();
+      if (data.updatedHistory) {
+        setPlaylistHistory(data.updatedHistory);
+      } else if (token) {
+        fetchPlaylistHistory();
+      }
       return data;
     } catch (e) {
       alert(e.message);
@@ -387,9 +391,10 @@ export default function App() {
     }
   }, [user, isHost, stage]);
 
-  async function loadFromHistory(item) {
-    setPlaylistUrl(item.url);
-    const data = await parsePlaylist(item.url);
+  async function loadFromHistory(url) {
+    if (!url) return;
+    setPlaylistUrl(url);
+    const data = await parsePlaylist(url);
     if (data) {
       socket.emit(
         "startGame",
@@ -772,26 +777,17 @@ export default function App() {
             {playlistHistory.length > 0 ? (
               <div style={{ marginTop: 8 }}>
                 <h4 style={{ margin: "8px 0" }}>{dict.recentPlaylists}</h4>
-                <div
-                  className="row"
-                  style={{
-                    flexWrap: "wrap",
-                    gap: 8,
-                    maxHeight: 120,
-                    overflowY: "auto",
-                    padding: 4,
-                  }}>
-                  {playlistHistory.map((item, idx) => (
-                    <button
-                      key={idx}
-                      className="btn ghost"
-                      style={{ fontSize: "0.85em", padding: "4px 12px" }}
-                      onClick={() => loadFromHistory(item)}
-                      disabled={loadingPlaylist}>
-                      {item.source === "spotify" ? "🟢" : "🔴"} {item.name}
-                    </button>
-                  ))}
-                </div>
+                <CustomSelect
+                  options={[
+                    { value: "", label: dict.selectRecentPlaylist },
+                    ...playlistHistory.map((h) => ({
+                      value: h.url,
+                      label: `${h.source === "spotify" ? "🟢" : "🔴"} ${h.name}`,
+                    })),
+                  ]}
+                  value=""
+                  onChange={loadFromHistory}
+                />
               </div>
             ) : user ? (
               <div style={{ marginTop: 8, opacity: 0.6, fontSize: "0.8em" }}>
