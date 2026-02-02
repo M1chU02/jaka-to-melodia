@@ -588,6 +588,35 @@ export default function App() {
           <button className="btn ghost" onClick={fetchLeaderboard}>
             🏆 {dict.leaderboard || "Ranking"}
           </button>
+          {user ? (
+            <div className="row" style={{ marginLeft: 8 }}>
+              <img
+                src={user.photoURL}
+                style={{ width: 24, height: 24, borderRadius: "50%" }}
+                alt="avatar"
+              />
+              <span className="kbd" style={{ fontSize: "0.8em" }}>
+                {user.displayName}
+              </span>
+              <button
+                className="btn ghost"
+                onClick={logout}
+                style={{ padding: "2px 8px", fontSize: "0.7em" }}>
+                {dict.logout || "Wyloguj"}
+              </button>
+            </div>
+          ) : (
+            <button
+              className="btn"
+              onClick={login}
+              style={{
+                backgroundColor: "#4285f4",
+                padding: "4px 12px",
+                fontSize: "0.8em",
+              }}>
+              G {dict.loginWithGoogle || "Login"}
+            </button>
+          )}
         </div>
       </div>
       <p className="subtitle">{dict.subtitle}</p>
@@ -740,7 +769,7 @@ export default function App() {
               onChange={(e) => setPlaylistUrl(e.target.value)}
             />
 
-            {playlistHistory.length > 0 && (
+            {playlistHistory.length > 0 ? (
               <div style={{ marginTop: 8 }}>
                 <h4 style={{ margin: "8px 0" }}>{dict.recentPlaylists}</h4>
                 <div
@@ -764,7 +793,15 @@ export default function App() {
                   ))}
                 </div>
               </div>
-            )}
+            ) : user ? (
+              <div style={{ marginTop: 8, opacity: 0.6, fontSize: "0.8em" }}>
+                <i>
+                  (
+                  {dict.noRecentPlaylists || "Brak ostatnio używanych playlist"}
+                  )
+                </i>
+              </div>
+            ) : null}
             <div className="row">
               <button
                 className="btn"

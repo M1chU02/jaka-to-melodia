@@ -79,6 +79,7 @@ export const dictionaries = {
     pause: "Pause",
     resume: "Resume",
     recentPlaylists: "Ostatnio używane playlisty",
+    noRecentPlaylists: "Brak ostatnio używanych playlist",
   },
 
   en: {
@@ -161,6 +162,7 @@ export const dictionaries = {
     pause: "Pause",
     resume: "Resume",
     recentPlaylists: "Recently used playlists",
+    noRecentPlaylists: "No recently used playlists",
   },
 };
 
