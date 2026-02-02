@@ -12,7 +12,8 @@ import {
 } from "./spotify.js";
 import { fetchYouTubePlaylist, parseYouTubePlaylistId } from "./youtube.js";
 import { isGuessCorrect, getDetailedMatch } from "./utils.js";
-import { updateLeaderboardScore, getLeaderboard } from "./leaderboard.js";
+import { getLeaderboard, updateLeaderboardScore } from "./leaderboard.js";
+import { savePlaylistToHistory, getPlaylistHistory } from "./history.js";
 import {
   saveRoom,
   getRoomFromFirestore,
@@ -286,8 +287,18 @@ function broadcastRoom(code) {
 // ===== REST: Parse + fetch playlists =====
 app.post("/api/parse-playlist", async (req, res) => {
   try {
-    const { url, songCount = 20 } = req.body;
+    const { url, songCount = 20, token } = req.body;
     if (!url) return res.status(400).json({ error: "Missing playlist URL." });
+
+    let userId = null;
+    if (token) {
+      try {
+        const decodedToken = await admin.auth().verifyIdToken(token);
+        userId = decodedToken.uid;
+      } catch (e) {
+        console.warn("Invalid token in parse-playlist:", e.message);
+      }
+    }
 
     if (parseSpotifyPlaylistId(url)) {
       if (
@@ -296,31 +307,35 @@ app.post("/api/parse-playlist", async (req, res) => {
       ) {
         return res
           .status(400)
-          .json({ error: "Spotify API is not configured on the server." });
+          .json({ error: "Missing Spotify credentials on server." });
       }
-      const data = await fetchSpotifyPlaylistTracks({
+      let data = await fetchSpotifyPlaylistTracks({
         url,
         clientId: process.env.SPOTIFY_CLIENT_ID,
         clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
       });
 
-      // --- AUTOMATIC YT WORKAROUND (youtube-sr) - Optimized Parallel Search ---
-      const allTracks = data.tracks || [];
-      const shuffled = [...allTracks].sort(() => Math.random() - 0.5);
+      if (userId) {
+        await savePlaylistToHistory(userId, {
+          url,
+          name: data.playlistName,
+          source: "spotify",
+        });
+      }
 
-      // We take a larger batch to ensure we find enough playable tracks
-      const batchSize = Math.min(shuffled.length, songCount * 2);
-      const batch = shuffled.slice(0, batchSize);
+      // Shuffle tracks
+      data.tracks.sort(() => Math.random() - 0.5);
 
-      console.log(
-        `Parallel searching for ${batchSize} tracks for playlist: ${data.playlistId}`,
-      );
-
-      // Perform searches in parallel for the whole batch
+      // Enrich only a first few to save time/YT quota
+      const batchToEnrich = data.tracks.slice(0, Math.max(songCount * 2, 40));
       const enrichedBatch = await Promise.all(
-        batch.map(async (t) => {
-          const videoId = await getYouTubeVideoId(t.title, t.artist);
-          return { ...t, videoId };
+        batchToEnrich.map(async (t) => {
+          // If already has previewUrl, return it
+          // OR if it's Spotify, we still prefer YT if possible for full playback,
+          // but we can fallback to Spotify's 30s preview.
+          // Let's try to get YT ID anyway if not present
+          const playback = await buildPlaybackForTrack(t, "spotify");
+          return { ...t, videoId: playback?.videoId };
         }),
       );
 
@@ -348,12 +363,18 @@ app.post("/api/parse-playlist", async (req, res) => {
         apiKey: process.env.YT_API_KEY,
       });
 
-      // Shuffle and limit tracks for YouTube as well
-      if (data.tracks && data.tracks.length > songCount) {
-        const shuffled = data.tracks.sort(() => Math.random() - 0.5);
-        data.tracks = shuffled.slice(0, songCount);
-        data.total = data.tracks.length;
+      if (userId) {
+        await savePlaylistToHistory(userId, {
+          url,
+          name: data.playlistName,
+          source: "youtube",
+        });
       }
+
+      // Shuffle and take requested count
+      data.tracks.sort(() => Math.random() - 0.5);
+      data.tracks = data.tracks.slice(0, songCount);
+      data.total = data.tracks.length;
 
       return res.json(data);
     }
@@ -376,6 +397,20 @@ app.get("/api/leaderboard", async (req, res) => {
     res.json(list);
   } catch (e) {
     res.status(500).json({ error: "Failed to fetch leaderboard" });
+  }
+});
+
+app.get("/api/playlist-history", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ error: "Unauthorized" });
+
+    const decodedToken = await admin.auth().verifyIdToken(token);
+    const history = await getPlaylistHistory(decodedToken.uid);
+    res.json(history);
+  } catch (e) {
+    console.error("Fetch history error:", e);
+    res.status(500).json({ error: "Failed to fetch playlist history" });
   }
 });
 

@@ -78,6 +78,7 @@ export const dictionaries = {
     kickedMessage: "Zostałeś wyrzucony z pokoju",
     pause: "Pause",
     resume: "Resume",
+    recentPlaylists: "Ostatnio używane playlisty",
   },
 
   en: {
@@ -159,6 +160,7 @@ export const dictionaries = {
     kickedMessage: "You have been kicked from the room",
     pause: "Pause",
     resume: "Resume",
+    recentPlaylists: "Recently used playlists",
   },
 };
 

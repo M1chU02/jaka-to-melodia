@@ -17,21 +17,40 @@ export async function fetchYouTubePlaylist({ url, apiKey }) {
   const id = parseYouTubePlaylistId(url);
   if (!id) throw new Error("Nieprawidłowy link do playlisty YouTube.");
 
+  // Fetch playlist info (for name)
+  const playlistInfoResp = await axios.get(
+    "https://www.googleapis.com/youtube/v3/playlists",
+    {
+      params: {
+        part: "snippet",
+        id,
+        key: apiKey,
+      },
+    },
+  );
+  const playlistName =
+    playlistInfoResp.data.items?.[0]?.snippet?.title || "YouTube Playlist";
+
   // Page through playlistItems to get videoIds
   let videoIds = [];
   let pageToken = null;
   do {
-    const resp = await axios.get("https://www.googleapis.com/youtube/v3/playlistItems", {
-      params: {
-        part: "contentDetails",
-        maxResults: 50,
-        playlistId: id,
-        key: apiKey,
-        pageToken: pageToken || undefined
-      }
-    });
+    const resp = await axios.get(
+      "https://www.googleapis.com/youtube/v3/playlistItems",
+      {
+        params: {
+          part: "contentDetails",
+          maxResults: 50,
+          playlistId: id,
+          key: apiKey,
+          pageToken: pageToken || undefined,
+        },
+      },
+    );
     const items = resp.data.items || [];
-    videoIds.push(...items.map(i => i.contentDetails.videoId).filter(Boolean));
+    videoIds.push(
+      ...items.map((i) => i.contentDetails.videoId).filter(Boolean),
+    );
     pageToken = resp.data.nextPageToken;
   } while (pageToken);
 
@@ -39,27 +58,38 @@ export async function fetchYouTubePlaylist({ url, apiKey }) {
   let tracks = [];
   for (let i = 0; i < videoIds.length; i += 50) {
     const batch = videoIds.slice(i, i + 50);
-    const resp = await axios.get("https://www.googleapis.com/youtube/v3/videos", {
-      params: {
-        part: "snippet",
-        id: batch.join(","),
-        key: apiKey
-      }
-    });
+    const resp = await axios.get(
+      "https://www.googleapis.com/youtube/v3/videos",
+      {
+        params: {
+          part: "snippet",
+          id: batch.join(","),
+          key: apiKey,
+        },
+      },
+    );
     const items = resp.data.items || [];
-    tracks.push(...items.map(v => ({
-      id: v.id,
-      title: v.snippet.title,
-      artist: v.snippet.channelTitle || "",
-      cover: (v.snippet.thumbnails && (v.snippet.thumbnails.maxres?.url || v.snippet.thumbnails.high?.url || v.snippet.thumbnails.default?.url)) || null,
-      source: "youtube"
-    })));
+    tracks.push(
+      ...items.map((v) => ({
+        id: v.id,
+        title: v.snippet.title,
+        artist: v.snippet.channelTitle || "",
+        cover:
+          (v.snippet.thumbnails &&
+            (v.snippet.thumbnails.maxres?.url ||
+              v.snippet.thumbnails.high?.url ||
+              v.snippet.thumbnails.default?.url)) ||
+          null,
+        source: "youtube",
+      })),
+    );
   }
 
   return {
     source: "youtube",
     playlistId: id,
+    playlistName,
     total: tracks.length,
-    tracks
+    tracks,
   };
 }

@@ -71,6 +71,7 @@ export default function App() {
   const [songCount, setSongCount] = useState(20);
   const [parsed, setParsed] = useState(null);
   const [loadingPlaylist, setLoadingPlaylist] = useState(false);
+  const [playlistHistory, setPlaylistHistory] = useState([]);
 
   // ===== Round =====
   const [round, setRound] = useState(null);
@@ -340,21 +341,67 @@ export default function App() {
     );
   }
 
-  async function parsePlaylist() {
+  async function parsePlaylist(overrideUrl = null) {
+    const urlToUse = overrideUrl || playlistUrl;
+    if (!urlToUse) return;
     try {
       setLoadingPlaylist(true);
+      const token = user ? await user.getIdToken() : null;
       const r = await fetch(`${SERVER_URL}/api/parse-playlist`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: playlistUrl, songCount }),
+        body: JSON.stringify({ url: urlToUse, songCount, token }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Error loading playlist.");
       setParsed(data);
+      if (token) fetchPlaylistHistory();
+      return data;
     } catch (e) {
       alert(e.message);
     } finally {
       setLoadingPlaylist(false);
+    }
+  }
+
+  async function fetchPlaylistHistory() {
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      const r = await fetch(`${SERVER_URL}/api/playlist-history`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await r.json();
+      if (Array.isArray(data)) {
+        setPlaylistHistory(data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch history:", e);
+    }
+  }
+
+  useEffect(() => {
+    if (user && isHost && stage === "lobby") {
+      fetchPlaylistHistory();
+    }
+  }, [user, isHost, stage]);
+
+  async function loadFromHistory(item) {
+    setPlaylistUrl(item.url);
+    const data = await parsePlaylist(item.url);
+    if (data) {
+      socket.emit(
+        "startGame",
+        {
+          code: roomCode,
+          mode: data.source,
+          tracks: data.tracks,
+          gameType,
+        },
+        (resp) => {
+          if (resp?.error) return alert(resp.error);
+        },
+      );
     }
   }
 
@@ -691,6 +738,32 @@ export default function App() {
               value={playlistUrl}
               onChange={(e) => setPlaylistUrl(e.target.value)}
             />
+
+            {playlistHistory.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <h4 style={{ margin: "8px 0" }}>{dict.recentPlaylists}</h4>
+                <div
+                  className="row"
+                  style={{
+                    flexWrap: "wrap",
+                    gap: 8,
+                    maxHeight: 120,
+                    overflowY: "auto",
+                    padding: 4,
+                  }}>
+                  {playlistHistory.map((item, idx) => (
+                    <button
+                      key={idx}
+                      className="btn ghost"
+                      style={{ fontSize: "0.85em", padding: "4px 12px" }}
+                      onClick={() => loadFromHistory(item)}
+                      disabled={loadingPlaylist}>
+                      {item.source === "spotify" ? "🟢" : "🔴"} {item.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="row">
               <button
                 className="btn"

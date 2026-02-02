@@ -45,6 +45,16 @@ export async function fetchSpotifyPlaylistTracks({
 
   const token = await getSpotifyToken(clientId, clientSecret);
 
+  // Fetch playlist info (for name)
+  const playlistResp = await axios.get(
+    `https://api.spotify.com/v1/playlists/${id}`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { fields: "name" },
+    },
+  );
+  const playlistName = playlistResp.data.name;
+
   // Fetch in pages
   let items = [];
   let next = `https://api.spotify.com/v1/playlists/${id}/tracks?limit=100`;
@@ -77,6 +87,7 @@ export async function fetchSpotifyPlaylistTracks({
   return {
     source: "spotify",
     playlistId: id,
+    playlistName,
     total: tracks.length,
     playable: tracks.filter((t) => !!t.previewUrl).length,
     tracks,
