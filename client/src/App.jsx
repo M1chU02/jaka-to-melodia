@@ -90,6 +90,7 @@ export default function App() {
   const [verifyStatus, setVerifyStatus] = useState(null); // { artist: bool, title: bool }
   const [leaderboard, setLeaderboard] = useState([]);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
 
   // ===== Players (media refs) =====
   const audioRef = useRef(null);
@@ -592,6 +593,9 @@ export default function App() {
           />
           <button className="btn ghost" onClick={fetchLeaderboard}>
             🏆 {dict.leaderboard || "Ranking"}
+          </button>
+          <button className="btn ghost" onClick={() => setShowAbout(true)}>
+            ℹ️ {dict.about || "O grze"}
           </button>
           {user ? (
             <div className="row" style={{ marginLeft: 8 }}>
@@ -1181,6 +1185,37 @@ export default function App() {
             </ul>
           )}
         </Section>
+      )}
+
+      {/* About Modal */}
+      {showAbout && (
+        <div className="modal-overlay" onClick={() => setShowAbout(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setShowAbout(false)}>
+              ×
+            </button>
+
+            <div className="about-section">
+              <h3>{dict.aboutTitle}</h3>
+              <p>{dict.aboutDesc}</p>
+              <p>{dict.aboutRules}</p>
+            </div>
+
+            <div className="about-section">
+              <h3>{dict.legalNotice}</h3>
+              <div className="legal-box">
+                <p>{dict.legalDesc}</p>
+              </div>
+            </div>
+
+            <button
+              className="btn secondary"
+              style={{ width: "100%", marginTop: 12 }}
+              onClick={() => setShowAbout(false)}>
+              {dict.close}
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

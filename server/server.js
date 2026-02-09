@@ -71,6 +71,10 @@ app.use(
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: process.env.CLIENT_ORIGIN?.split(",") || "*" },
+  pingTimeout: 60000, // 60 seconds - czas oczekiwania na odpowiedź pong
+  pingInterval: 25000, // 25 seconds - częstotliwość wysyłania ping
+  connectTimeout: 45000, // 45 seconds - timeout dla początkowego połączenia
+  transports: ["websocket", "polling"], // preferuj websocket, fallback na polling
 });
 
 const PORT = process.env.PORT || 4000;

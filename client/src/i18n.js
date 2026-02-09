@@ -81,6 +81,16 @@ export const dictionaries = {
     recentPlaylists: "Ostatnio używane playlisty",
     noRecentPlaylists: "Brak ostatnio używanych playlist",
     selectRecentPlaylist: "Wybierz z ostatnio używanych...",
+    about: "O grze",
+    aboutTitle: "Jak to działa?",
+    aboutDesc:
+      "Stwórz pokój, zaproś znajomych i wczytaj dowolną playlistę ze Spotify lub YouTube. Gra automatycznie wyszuka utwory i pozwoli Wam rywalizować w zgadywaniu tytułów i wykonawców.",
+    aboutRules:
+      "Możesz grać w trybie tekstowym (pisanie odpowiedzi na czacie) lub 'Buzzer' (kto pierwszy się zgłosi, odpowiada głosem).",
+    legalNotice: "Nota prawna",
+    legalDesc:
+      "To jest projekt fanowski i niekomercyjny. Wszystkie utwory muzyczne oraz materiały wideo należą do ich odpowiednich właścicieli i są odtwarzane za pośrednictwem oficjalnego API YouTube. Aplikacja nie przechowuje ani nie udostępnia plików muzycznych.",
+    close: "Zamknij",
   },
 
   en: {
@@ -165,6 +175,16 @@ export const dictionaries = {
     recentPlaylists: "Recently used playlists",
     noRecentPlaylists: "No recently used playlists",
     selectRecentPlaylist: "Select from recently used...",
+    about: "About",
+    aboutTitle: "How it works?",
+    aboutDesc:
+      "Create a room, invite friends, and load any Spotify or YouTube playlist. The game will automatically search for tracks and let you compete in guessing titles and artists.",
+    aboutRules:
+      "You can play in Text mode (typing answers in chat) or 'Buzzer' mode (the first one to buzz in answers via voice).",
+    legalNotice: "Legal Notice",
+    legalDesc:
+      "This is a fan-made, non-commercial project. All music tracks and video materials belong to their respective owners and are played via the official YouTube API. The application does not store or share music files.",
+    close: "Close",
   },
 };
 
