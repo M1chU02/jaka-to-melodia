@@ -1113,6 +1113,7 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(PORT, () => {
+// Start server immediately so Render can detect the port
+server.listen(PORT, "0.0.0.0", () => {
   console.log("Server listening on port", PORT);
 });
