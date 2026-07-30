@@ -1,14 +1,14 @@
 :root {
-  --bg: #0b0f14;
-  --card: #0d1220;
-  --muted: #9aa5b1;
-  --text: #e5e7eb;
-  --accent: #7c3aed;
-  --accent-2: #22d3ee;
-  --border: #1f2937;
+  --bg: #090e17;
+  --card: rgba(16, 24, 39, 0.65);
+  --muted: #94a3b8;
+  --text: #f8fafc;
+  --accent: #3b82f6;
+  --accent-2: #60a5fa;
+  --border: #1e293b;
   --success: #10b981;
   --danger: #ef4444;
-  --shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+  --shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
 }
 
 * {
@@ -34,12 +34,12 @@ body {
   background:
     radial-gradient(
       1200px 800px at 10% -10%,
-      rgba(124, 58, 237, 0.25),
+      rgba(59, 130, 246, 0.25),
       transparent 55%
     ),
     radial-gradient(
       900px 700px at 110% 10%,
-      rgba(34, 211, 238, 0.18),
+      rgba(96, 165, 250, 0.15),
       transparent 55%
     ),
     var(--bg);
@@ -117,18 +117,16 @@ button {
 }
 
 .card {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.05),
-    rgba(255, 255, 255, 0.02)
-  );
+  background: var(--card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border);
   border-radius: 18px;
   padding: 14px;
   box-shadow: var(--shadow);
 }
 .card:hover {
-  border-color: rgba(124, 58, 237, 0.35);
+  border-color: rgba(59, 130, 246, 0.4);
 }
 
 .row {
@@ -203,7 +201,7 @@ textarea {
 .select:focus,
 textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.25);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
 }
 .select {
   background: #1f2937;
@@ -225,12 +223,12 @@ textarea:focus {
   padding-right: 32px;
 }
 .select:hover {
-  border-color: #8b5cf6;
-  box-shadow: 0 0 6px rgba(139, 92, 246, 0.4);
+  border-color: #3b82f6;
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.4);
 }
 .select:focus {
-  border-color: #a78bfa;
-  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.3);
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.3);
 }
 .select option {
   background: #111827;
@@ -243,9 +241,9 @@ textarea:focus {
   padding: 8px 12px;
   font-weight: 700;
   cursor: pointer;
-  background: linear-gradient(180deg, var(--accent), #5b21b6);
+  background: linear-gradient(180deg, var(--accent), #1d4ed8);
   color: white;
-  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.3);
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3);
   font-size: 15px;
 }
 @media (min-width: 2500px) {
@@ -336,7 +334,7 @@ textarea:focus {
   border-radius: 50%;
   background: var(--accent);
   cursor: pointer;
-  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.25);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.25);
 }
 .range::-moz-range-thumb {
   width: 16px;
@@ -382,8 +380,8 @@ textarea:focus {
 }
 
 .custom-select-btn:hover {
-  border-color: #8b5cf6;
-  box-shadow: 0 0 6px rgba(139, 92, 246, 0.4);
+  border-color: #3b82f6;
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.4);
 }
 
 .custom-select-list {
@@ -410,13 +408,13 @@ textarea:focus {
 }
 
 .custom-select-item:hover {
-  background: #1f2937;
-  color: #a78bfa;
+  background: #1e293b;
+  color: #60a5fa;
 }
 
 .custom-select-item.active {
-  background: #312e81;
-  color: #c4b5fd;
+  background: #1e3a8a;
+  color: #93c5fd;
 }
 
 .arrow {
